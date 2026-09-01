@@ -1,0 +1,6 @@
+{
+  "name": "siWali - SMK Negeri 2 Gorontalo",
+  "description": "Sistem Informasi Digital Guru Wali DKV SMK Negeri 2 Gorontalo untuk pencatatan data murid wali, konsultasi, kolaborasi BK, SOP penanganan kasus, dan cetak laporan resmi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
