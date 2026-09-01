@@ -122,6 +122,21 @@ export function App() {
 
   // Real-Time Polling & Tab-Focus Background Sync
   useEffect(() => {
+    // Check if URL contains ?syncUrl=... parameter to automatically register it
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlSyncParam = urlParams.get('syncUrl');
+      if (urlSyncParam && urlSyncParam.startsWith('https://script.google.com/')) {
+        const currentCfg = SheetsSyncService.getConfig();
+        SheetsSyncService.saveConfig({
+          ...currentCfg,
+          webAppUrl: urlSyncParam.trim(),
+          autoSyncEnabled: true,
+        });
+        setIsSheetsConfigured(true);
+      }
+    } catch {}
+
     const doPull = async () => {
       const cfg = SheetsSyncService.getConfig();
       if (cfg.webAppUrl && cfg.autoSyncEnabled) {
@@ -854,6 +869,7 @@ export function App() {
           setIsSheetsConfigured(SheetsSyncService.isConfigured());
         }}
         students={students}
+        activities={activities}
         consultations={consultations}
         collaborations={collaborations}
         cases={cases}

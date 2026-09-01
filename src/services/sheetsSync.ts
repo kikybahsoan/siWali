@@ -3,8 +3,10 @@ import { StorageService } from './storage';
 
 const SHEETS_CONFIG_KEY = 'siwali_sheets_sync_config_v1';
 
+export const DEFAULT_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz8odQurm_YBWJVhMglT8z4NH9d1OO9odFL37laRn9l8mWTn1BpAGiWx_ias0X5606YtQ/exec';
+
 export const DEFAULT_SHEETS_CONFIG: GoogleSheetsConfig = {
-  webAppUrl: '',
+  webAppUrl: DEFAULT_SHEETS_WEB_APP_URL,
   spreadsheetUrl: '',
   lastSyncTime: '',
   autoSyncEnabled: true,
@@ -183,7 +185,43 @@ function saveAllDataToSheets(payload) {
     }
   }
 
-  // 2. KONSULTASI PERWALIAN
+  // 2. KEGIATAN PEMBIASAAN
+  if (payload.activities && Array.isArray(payload.activities)) {
+    var headersKegiatan = [
+      'ID', 'Tanggal', 'Hari', 'Waktu', 'Kategori', 'Tipe', 'Judul Kegiatan', 'Deskripsi Ringkas', 'Peserta Hadir', 'Target Hadir', 'Catatan Evaluasi', 'Link Foto Dokumentasi', 'Data JSON Lengkap', 'Waktu Dibuat'
+    ];
+    var sheetKegiatan = getOrCreateSheet('KEGIATAN_PEMBIASAAN', headersKegiatan);
+    sheetKegiatan.clearContents();
+    sheetKegiatan.appendRow(headersKegiatan);
+    sheetKegiatan.getRange(1, 1, 1, headersKegiatan.length).setBackground('#0D9488').setFontColor('#FFFFFF').setFontWeight('bold');
+    sheetKegiatan.setFrozenRows(1);
+
+    var rowsKegiatan = [];
+    for (var a = 0; a < payload.activities.length; a++) {
+      var act = payload.activities[a];
+      rowsKegiatan.push([
+        act.id || '',
+        act.date || '',
+        act.dayName || '',
+        act.time || '',
+        act.category || '',
+        act.type || '',
+        act.title || '',
+        act.description || '',
+        act.attendeeCount || 0,
+        act.targetCount || 0,
+        act.notes || '',
+        act.photoUrl || '',
+        JSON.stringify(act),
+        act.createdAt || ''
+      ]);
+    }
+    if (rowsKegiatan.length > 0) {
+      sheetKegiatan.getRange(2, 1, rowsKegiatan.length, rowsKegiatan[0].length).setValues(rowsKegiatan);
+    }
+  }
+
+  // 3. KONSULTASI PERWALIAN
   if (payload.consultations && Array.isArray(payload.consultations)) {
     var sheetKonsul = getOrCreateSheet('KONSULTASI_PERWALIAN', [
       'ID', 'Tanggal', 'Hari', 'Nama Murid', 'Rombel', 'Permasalahan', 'Arahan Guru Wali', 'Status Tindak Lanjut', 'Data JSON Lengkap', 'Waktu Dibuat'
@@ -354,7 +392,22 @@ function getAllDataFromSheets() {
     }
   }
 
-  // 2. KONSULTASI
+  // 2. KEGIATAN PEMBIASAAN
+  var sheetKegiatan = ss.getSheetByName('KEGIATAN_PEMBIASAAN');
+  if (sheetKegiatan && sheetKegiatan.getLastRow() > 1) {
+    var valuesKegiatan = sheetKegiatan.getRange(2, 1, sheetKegiatan.getLastRow() - 1, sheetKegiatan.getLastColumn()).getValues();
+    for (var a = 0; a < valuesKegiatan.length; a++) {
+      var jsonKegiatan = valuesKegiatan[a][12]; // Col 13 (Index 12)
+      if (jsonKegiatan && typeof jsonKegiatan === 'string' && jsonKegiatan.indexOf('{') === 0) {
+        try {
+          if (!result.activities) result.activities = [];
+          result.activities.push(JSON.parse(jsonKegiatan));
+        } catch(e) {}
+      }
+    }
+  }
+
+  // 3. KONSULTASI
   var sheetKonsul = ss.getSheetByName('KONSULTASI_PERWALIAN');
   if (sheetKonsul && sheetKonsul.getLastRow() > 1) {
     var valuesKonsul = sheetKonsul.getRange(2, 1, sheetKonsul.getLastRow() - 1, sheetKonsul.getLastColumn()).getValues();
@@ -409,8 +462,14 @@ export const SheetsSyncService = {
   getConfig: (): GoogleSheetsConfig => {
     try {
       const data = localStorage.getItem(SHEETS_CONFIG_KEY);
-      if (!data) return DEFAULT_SHEETS_CONFIG;
-      return { ...DEFAULT_SHEETS_CONFIG, ...JSON.parse(data) };
+      let parsed = data ? JSON.parse(data) : {};
+      
+      // If webAppUrl is empty or blank, fallback to DEFAULT_SHEETS_WEB_APP_URL
+      if (!parsed.webAppUrl || typeof parsed.webAppUrl !== 'string' || parsed.webAppUrl.trim() === '') {
+        parsed.webAppUrl = DEFAULT_SHEETS_WEB_APP_URL;
+      }
+
+      return { ...DEFAULT_SHEETS_CONFIG, ...parsed };
     } catch {
       return DEFAULT_SHEETS_CONFIG;
     }
@@ -427,6 +486,49 @@ export const SheetsSyncService = {
   isConfigured: (): boolean => {
     const cfg = SheetsSyncService.getConfig();
     return Boolean(cfg.webAppUrl && cfg.webAppUrl.trim().startsWith('https://script.google.com/'));
+  },
+
+  getShareableSyncUrl: (baseUrl?: string): string => {
+    const cfg = SheetsSyncService.getConfig();
+    const currentBase = baseUrl || window.location.origin + window.location.pathname;
+    if (!cfg.webAppUrl) return currentBase;
+    const cleanBase = currentBase.split('?')[0].split('#')[0];
+    return `${cleanBase}?syncUrl=${encodeURIComponent(cfg.webAppUrl.trim())}`;
+  },
+
+  // Export all application data as a downloadable JSON backup file
+  exportBackupFile: (): void => {
+    const data = StorageService.getAllData();
+    const payload: FullSyncPayload = {
+      ...data,
+      lastUpdated: new Date().toISOString(),
+    };
+    const jsonStr = JSON.stringify(payload, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date().toISOString().split('T')[0];
+    a.href = url;
+    a.download = `siWali-Backup-Lengkap-${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
+  // Import backup data from a JSON file object
+  importBackupFile: async (file: File): Promise<{ success: boolean; message: string }> => {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!parsed || (typeof parsed !== 'object')) {
+        return { success: false, message: 'Format file cadangan tidak valid.' };
+      }
+      StorageService.importAllData(parsed);
+      return { success: true, message: 'Data cadangan berhasil dipulihkan!' };
+    } catch (err: any) {
+      return { success: false, message: `Gagal membaca file: ${err.message}` };
+    }
   },
 
   // Pull latest data from Google Sheets Web App
@@ -452,7 +554,14 @@ export const SheetsSyncService = {
       if (result.status === 'success' && result.data) {
         const remoteData = result.data;
         // Import into local storage
-        if (remoteData.students && remoteData.students.length > 0) {
+        if (
+          (remoteData.students && remoteData.students.length > 0) ||
+          (remoteData.activities && remoteData.activities.length > 0) ||
+          (remoteData.consultations && remoteData.consultations.length > 0) ||
+          (remoteData.collaborations && remoteData.collaborations.length > 0) ||
+          (remoteData.cases && remoteData.cases.length > 0) ||
+          remoteData.profile
+        ) {
           StorageService.importAllData(remoteData);
         }
         
