@@ -4,7 +4,8 @@ import { Lock, Eye, EyeOff, X, KeyRound, ShieldAlert, CheckCircle2, ShieldCheck 
 interface AdminAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess?: () => void;
+  onAuthenticated?: () => void;
 }
 
 export const ADMIN_PASSWORD = 'kikybahsoan';
@@ -13,6 +14,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  onAuthenticated,
 }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -26,7 +28,8 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
     if (password === ADMIN_PASSWORD) {
       setError(false);
       setPassword('');
-      onSuccess();
+      if (onSuccess) onSuccess();
+      if (onAuthenticated) onAuthenticated();
       onClose();
     } else {
       setError(true);

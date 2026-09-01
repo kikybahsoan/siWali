@@ -867,6 +867,7 @@ export function App() {
       <AdminAuthModal
         isOpen={isAdminAuthModalOpen}
         onClose={() => setIsAdminAuthModalOpen(false)}
+        onSuccess={handleLoginAdmin}
         onAuthenticated={handleLoginAdmin}
       />
     </div>
