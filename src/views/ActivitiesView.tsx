@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ActivityLog, ActivityType, ActivityCategory, RombelType, SchoolProfile } from '../types';
 import { DriveImage } from '../components/DriveImage';
 import { extractDriveFileId, DRIVE_GUIDE_STEPS } from '../utils/imageHelper';
@@ -30,6 +30,10 @@ import {
   Dumbbell,
   Sparkle,
   Building,
+  CloudUpload,
+  CloudCheck,
+  RefreshCw,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 interface ActivitiesViewProps {
@@ -40,6 +44,11 @@ interface ActivitiesViewProps {
   onSaveActivity: (activity: ActivityLog) => void;
   onDeleteActivity: (id: string) => void;
   onPrintActivities?: (activities: ActivityLog[], title: string) => void;
+  onOpenSheetsSync?: () => void;
+  onSyncNow?: () => Promise<void>;
+  isSyncingSheets?: boolean;
+  isOpenNewDirectly?: boolean;
+  onCloseNewDirectly?: () => void;
 }
 
 const CATEGORY_OPTIONS: { label: ActivityCategory; type: ActivityType; icon: any }[] = [
@@ -64,17 +73,47 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
   onSaveActivity,
   onDeleteActivity,
   onPrintActivities,
+  onOpenSheetsSync,
+  onSyncNow,
+  isSyncingSheets = false,
+  isOpenNewDirectly = false,
+  onCloseNewDirectly,
 }) => {
   // Tabs: all, Harian, Mingguan, Bulanan
   const [activeTab, setActiveTab] = useState<'ALL' | ActivityType>('ALL');
   const [selectedRombel, setSelectedRombel] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   // Form State
   const [editingActivity, setEditingActivity] = useState<ActivityLog | null>(null);
   const [activityToDelete, setActivityToDelete] = useState<ActivityLog | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
   const [showDriveGuide, setShowDriveGuide] = useState<boolean>(false);
+
+  // Handle direct open new from quick action
+  useEffect(() => {
+    if (isOpenNewDirectly) {
+      handleOpenNew();
+      if (onCloseNewDirectly) onCloseNewDirectly();
+    }
+  }, [isOpenNewDirectly]);
+
+  const handleManualSync = async () => {
+    if (onSyncNow) {
+      setSyncFeedback('Menyinkronkan ke Google Spreadsheet...');
+      try {
+        await onSyncNow();
+        setSyncFeedback('Data Kegiatan Berhasil Disinkronkan ke Spreadsheet!');
+        setTimeout(() => setSyncFeedback(null), 4000);
+      } catch {
+        setSyncFeedback('Gagal menyinkronkan. Periksa koneksi Spreadsheet.');
+        setTimeout(() => setSyncFeedback(null), 4000);
+      }
+    } else if (onOpenSheetsSync) {
+      onOpenSheetsSync();
+    }
+  };
 
   // Detail Modal
   const [viewingActivity, setViewingActivity] = useState<ActivityLog | null>(null);
@@ -259,6 +298,28 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
 
           <div className="flex flex-wrap items-center gap-2">
             <button
+              onClick={handleManualSync}
+              disabled={isSyncingSheets}
+              className={`px-3 py-2 rounded-xl text-xs font-semibold backdrop-blur-xs transition-all border flex items-center gap-1.5 ${
+                isSyncingSheets
+                  ? 'bg-amber-500/20 text-amber-200 border-amber-400/30 animate-pulse'
+                  : 'bg-white/10 hover:bg-white/20 text-white border-white/20'
+              }`}
+              title="Sinkronkan Kegiatan Pembiasaan & Program Wali ke Google Spreadsheet"
+            >
+              {isSyncingSheets ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-300" />
+                  <span>Menyinkronkan...</span>
+                </>
+              ) : (
+                <>
+                  <CloudUpload className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Sinkronkan ke Cloud</span>
+                </>
+              )}
+            </button>
+            <button
               onClick={() => setShowDriveGuide(true)}
               className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium backdrop-blur-xs transition-all border border-white/20 flex items-center gap-1.5"
             >
@@ -274,6 +335,13 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
             </button>
           </div>
         </div>
+
+        {syncFeedback && (
+          <div className="mt-3 p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-100 text-xs font-medium flex items-center gap-2 animate-fadeIn">
+            <CloudCheck className="w-4 h-4 text-emerald-300 shrink-0" />
+            <span>{syncFeedback}</span>
+          </div>
+        )}
 
         {/* Quick Template Chips */}
         <div className="mt-5 pt-4 border-t border-white/15">

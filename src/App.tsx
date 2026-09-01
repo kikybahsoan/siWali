@@ -120,6 +120,18 @@ export function App() {
     }
   }, []);
 
+  const handleManualSyncNow = async () => {
+    setIsSheetsSyncing(true);
+    try {
+      const res = await SheetsSyncService.pushToSheets();
+      if (res.success) {
+        reloadData();
+      }
+    } finally {
+      setIsSheetsSyncing(false);
+    }
+  };
+
   // Real-Time Polling & Tab-Focus Background Sync
   useEffect(() => {
     // Check if URL contains ?syncUrl=... parameter to automatically register it
@@ -523,12 +535,14 @@ export function App() {
           {activeTab === 'activities' && (
             <ActivitiesView
               activities={activities}
-              students={students}
               profile={profile}
               isAdmin={isAdmin}
               onRequireAdmin={handleRequireAdmin}
               onSaveActivity={handleSaveActivity}
               onDeleteActivity={handleDeleteActivity}
+              onOpenSheetsSync={() => setIsSheetsModalOpen(true)}
+              onSyncNow={handleManualSyncNow}
+              isSyncingSheets={isSheetsSyncing}
               isOpenNewDirectly={isDirectActionModalOpen}
               onCloseNewDirectly={() => setIsDirectActionModalOpen(false)}
             />

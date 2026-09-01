@@ -755,6 +755,21 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
                 </pre>
               </div>
 
+              {/* Update Deployment Notice */}
+              <div className="p-4 rounded-xl border border-amber-300 bg-amber-50/90 text-amber-950 space-y-1.5 text-xs">
+                <div className="flex items-center gap-2 font-bold text-amber-900">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Tips Jika Anda Sudah Memasang Script Sebelumnya (Perbarui Versi):</span>
+                </div>
+                <p className="text-amber-900/90 leading-relaxed pl-6">
+                  Jika Anda telah memasang script versi lama, ganti kodenya di Apps Script dengan kode di atas, lalu klik:
+                  <strong className="block mt-1 font-semibold text-amber-950">
+                    Terapkan (Deploy) &gt; Kelola Penerapan (Manage Deployments) &gt; Edit (Ikon Pensil) &gt; Versi: Versi Baru (New version) &gt; Terapkan (Deploy).
+                  </strong>
+                  Dengan begitu, Google Spreadsheet akan langsung membuat dan membaca tab <strong>KEGIATAN_PEMBIASAAN</strong> secara otomatis.
+                </p>
+              </div>
+
               {/* Step by Step Guide */}
               <div className="space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">

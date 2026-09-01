@@ -188,7 +188,7 @@ function saveAllDataToSheets(payload) {
   // 2. KEGIATAN PEMBIASAAN
   if (payload.activities && Array.isArray(payload.activities)) {
     var headersKegiatan = [
-      'ID', 'Tanggal', 'Hari', 'Waktu', 'Kategori', 'Tipe', 'Judul Kegiatan', 'Deskripsi Ringkas', 'Peserta Hadir', 'Target Hadir', 'Catatan Evaluasi', 'Link Foto Dokumentasi', 'Data JSON Lengkap', 'Waktu Dibuat'
+      'ID', 'Tanggal', 'Hari', 'Waktu', 'Kategori', 'Tipe', 'Judul Kegiatan', 'Rombel', 'Lokasi', 'Partisipan', 'Jumlah Hadir', 'Status', 'Deskripsi Ringkas', 'Catatan Evaluasi / RTL', 'Pembina / PIC', 'Link Foto Dokumentasi', 'Data JSON Lengkap', 'Tgl Update'
     ];
     var sheetKegiatan = getOrCreateSheet('KEGIATAN_PEMBIASAAN', headersKegiatan);
     sheetKegiatan.clearContents();
@@ -207,13 +207,17 @@ function saveAllDataToSheets(payload) {
         act.category || '',
         act.type || '',
         act.title || '',
+        act.rombel || 'Semua Rombel',
+        act.location || '',
+        act.targetParticipants || '',
+        act.actualAttendanceCount || 0,
+        act.status || 'Terlaksana',
         act.description || '',
-        act.attendeeCount || 0,
-        act.targetCount || 0,
-        act.notes || '',
+        act.outcome || '',
+        act.leaderOrPic || '',
         act.photoUrl || '',
         JSON.stringify(act),
-        act.createdAt || ''
+        act.updatedAt || act.createdAt || new Date().toISOString()
       ]);
     }
     if (rowsKegiatan.length > 0) {
@@ -349,19 +353,29 @@ function saveAllDataToSheets(payload) {
       ['Program Keahlian', prof.expertiseProgram || 'DKV'],
       ['Tahun Ajaran', prof.schoolYear || '2026/2027'],
       ['Semester', prof.semester || 'Ganjil'],
+      ['Total Murid', String((payload.students || []).length)],
+      ['Total Kegiatan Pembiasaan', String((payload.activities || []).length)],
+      ['Total Konsultasi', String((payload.consultations || []).length)],
       ['Data JSON Lengkap', JSON.stringify(prof)],
+      ['Data Master Lengkap (Backup)', JSON.stringify(payload)],
       ['Terakhir Disinkronkan', new Date().toISOString()]
     ];
     sheetProfile.getRange(2, 1, rowsProfile.length, 2).setValues(rowsProfile);
   }
 
-  return { totalStudents: (payload.students || []).length, syncedAt: new Date().toISOString() };
+  return {
+    totalStudents: (payload.students || []).length,
+    totalActivities: (payload.activities || []).length,
+    totalConsultations: (payload.consultations || []).length,
+    syncedAt: new Date().toISOString()
+  };
 }
 
 function getAllDataFromSheets() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var result = {
     students: [],
+    activities: [],
     consultations: [],
     collaborations: [],
     cases: [],
@@ -376,7 +390,6 @@ function getAllDataFromSheets() {
     for (var i = 0; i < valuesMurid.length; i++) {
       var row = valuesMurid[i];
       var parsed = null;
-      // Search from the end for JSON payload column
       for (var colIdx = row.length - 1; colIdx >= 0; colIdx--) {
         var cell = row[colIdx];
         if (cell && typeof cell === 'string' && cell.indexOf('{') === 0 && cell.indexOf('"id"') !== -1) {
@@ -397,12 +410,41 @@ function getAllDataFromSheets() {
   if (sheetKegiatan && sheetKegiatan.getLastRow() > 1) {
     var valuesKegiatan = sheetKegiatan.getRange(2, 1, sheetKegiatan.getLastRow() - 1, sheetKegiatan.getLastColumn()).getValues();
     for (var a = 0; a < valuesKegiatan.length; a++) {
-      var jsonKegiatan = valuesKegiatan[a][12]; // Col 13 (Index 12)
-      if (jsonKegiatan && typeof jsonKegiatan === 'string' && jsonKegiatan.indexOf('{') === 0) {
-        try {
-          if (!result.activities) result.activities = [];
-          result.activities.push(JSON.parse(jsonKegiatan));
-        } catch(e) {}
+      var rowK = valuesKegiatan[a];
+      var parsedK = null;
+      for (var colK = rowK.length - 1; colK >= 0; colK--) {
+        var cellK = rowK[colK];
+        if (cellK && typeof cellK === 'string' && cellK.indexOf('{') === 0 && (cellK.indexOf('"title"') !== -1 || cellK.indexOf('"id"') !== -1 || cellK.indexOf('"category"') !== -1)) {
+          try {
+            parsedK = JSON.parse(cellK);
+            break;
+          } catch(e) {}
+        }
+      }
+      if (!parsedK && rowK[0]) {
+        parsedK = {
+          id: String(rowK[0] || ('act-' + (a + 1))),
+          date: String(rowK[1] || ''),
+          dayName: String(rowK[2] || ''),
+          time: String(rowK[3] || ''),
+          category: String(rowK[4] || 'Religi & Sholat Dhuha'),
+          type: String(rowK[5] || 'Harian'),
+          title: String(rowK[6] || 'Kegiatan'),
+          rombel: String(rowK[7] || 'Semua Rombel'),
+          location: String(rowK[8] || ''),
+          targetParticipants: String(rowK[9] || ''),
+          actualAttendanceCount: Number(rowK[10]) || 0,
+          status: String(rowK[11] || 'Terlaksana'),
+          description: String(rowK[12] || ''),
+          outcome: String(rowK[13] || ''),
+          leaderOrPic: String(rowK[14] || ''),
+          photoUrl: String(rowK[15] || ''),
+          createdAt: String(rowK[17] || new Date().toISOString()),
+          updatedAt: String(rowK[17] || new Date().toISOString())
+        };
+      }
+      if (parsedK) {
+        result.activities.push(parsedK);
       }
     }
   }
@@ -412,45 +454,95 @@ function getAllDataFromSheets() {
   if (sheetKonsul && sheetKonsul.getLastRow() > 1) {
     var valuesKonsul = sheetKonsul.getRange(2, 1, sheetKonsul.getLastRow() - 1, sheetKonsul.getLastColumn()).getValues();
     for (var j = 0; j < valuesKonsul.length; j++) {
-      var jsonKonsul = valuesKonsul[j][8]; // Col 9 (Index 8)
-      if (jsonKonsul && typeof jsonKonsul === 'string' && jsonKonsul.indexOf('{') === 0) {
-        try { result.consultations.push(JSON.parse(jsonKonsul)); } catch(e) {}
+      var rowC = valuesKonsul[j];
+      var parsedC = null;
+      for (var colC = rowC.length - 1; colC >= 0; colC--) {
+        var cellC = rowC[colC];
+        if (cellC && typeof cellC === 'string' && cellC.indexOf('{') === 0 && cellC.indexOf('"id"') !== -1) {
+          try {
+            parsedC = JSON.parse(cellC);
+            break;
+          } catch(e) {}
+        }
+      }
+      if (parsedC) {
+        result.consultations.push(parsedC);
       }
     }
   }
 
-  // 3. KOLABORASI
+  // 4. KOLABORASI
   var sheetCollab = ss.getSheetByName('KOLABORASI_BK_WALAS');
   if (sheetCollab && sheetCollab.getLastRow() > 1) {
     var valuesCollab = sheetCollab.getRange(2, 1, sheetCollab.getLastRow() - 1, sheetCollab.getLastColumn()).getValues();
     for (var k = 0; k < valuesCollab.length; k++) {
-      var jsonCollab = valuesCollab[k][9]; // Col 10 (Index 9)
-      if (jsonCollab && typeof jsonCollab === 'string' && jsonCollab.indexOf('{') === 0) {
-        try { result.collaborations.push(JSON.parse(jsonCollab)); } catch(e) {}
+      var rowB = valuesCollab[k];
+      var parsedB = null;
+      for (var colB = rowB.length - 1; colB >= 0; colB--) {
+        var cellB = rowB[colB];
+        if (cellB && typeof cellB === 'string' && cellB.indexOf('{') === 0 && cellB.indexOf('"id"') !== -1) {
+          try {
+            parsedB = JSON.parse(cellB);
+            break;
+          } catch(e) {}
+        }
+      }
+      if (parsedB) {
+        result.collaborations.push(parsedB);
       }
     }
   }
 
-  // 4. KASUS SOP
+  // 5. KASUS SOP
   var sheetCases = ss.getSheetByName('PENANGANAN_KASUS_SOP');
   if (sheetCases && sheetCases.getLastRow() > 1) {
     var valuesCases = sheetCases.getRange(2, 1, sheetCases.getLastRow() - 1, sheetCases.getLastColumn()).getValues();
     for (var m = 0; m < valuesCases.length; m++) {
-      var jsonCases = valuesCases[m][12]; // Col 13 (Index 12)
-      if (jsonCases && typeof jsonCases === 'string' && jsonCases.indexOf('{') === 0) {
-        try { result.cases.push(JSON.parse(jsonCases)); } catch(e) {}
+      var rowS = valuesCases[m];
+      var parsedS = null;
+      for (var colS = rowS.length - 1; colS >= 0; colS--) {
+        var cellS = rowS[colS];
+        if (cellS && typeof cellS === 'string' && cellS.indexOf('{') === 0 && cellS.indexOf('"id"') !== -1) {
+          try {
+            parsedS = JSON.parse(cellS);
+            break;
+          } catch(e) {}
+        }
+      }
+      if (parsedS) {
+        result.cases.push(parsedS);
       }
     }
   }
 
-  // 5. PROFIL SEKOLAH
+  // 6. PROFIL SEKOLAH & MASTER BACKUP RESTORE
   var sheetProfile = ss.getSheetByName('PROFIL_SEKOLAH');
   if (sheetProfile && sheetProfile.getLastRow() > 1) {
-    var valuesProf = sheetProfile.getRange(2, 1, sheetProfile.getLastRow() - 1, 2).getValues();
+    var valuesProf = sheetProfile.getRange(2, 1, sheetProfile.getLastRow() - 1, sheetProfile.getLastColumn()).getValues();
+    var backupStore = null;
     for (var p = 0; p < valuesProf.length; p++) {
       if (valuesProf[p][0] === 'Data JSON Lengkap') {
         try { result.profile = JSON.parse(valuesProf[p][1]); } catch(e) {}
       }
+      if (valuesProf[p][0] === 'Data Master Lengkap (Backup)') {
+        try { backupStore = JSON.parse(valuesProf[p][1]); } catch(e) {}
+      }
+    }
+    // Master backup restore if individual sheets were missing
+    if (result.activities.length === 0 && backupStore && backupStore.activities && backupStore.activities.length > 0) {
+      result.activities = backupStore.activities;
+    }
+    if (result.students.length === 0 && backupStore && backupStore.students && backupStore.students.length > 0) {
+      result.students = backupStore.students;
+    }
+    if (result.consultations.length === 0 && backupStore && backupStore.consultations && backupStore.consultations.length > 0) {
+      result.consultations = backupStore.consultations;
+    }
+    if (result.collaborations.length === 0 && backupStore && backupStore.collaborations && backupStore.collaborations.length > 0) {
+      result.collaborations = backupStore.collaborations;
+    }
+    if (result.cases.length === 0 && backupStore && backupStore.cases && backupStore.cases.length > 0) {
+      result.cases = backupStore.cases;
     }
   }
 

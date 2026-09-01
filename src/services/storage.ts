@@ -321,19 +321,19 @@ export const StorageService = {
     if (data.students && Array.isArray(data.students) && data.students.length > 0) {
       StorageService.saveStudents(data.students);
     }
-    if (data.activities && Array.isArray(data.activities)) {
+    if (data.activities && Array.isArray(data.activities) && data.activities.length > 0) {
       StorageService.saveActivities(data.activities);
     }
-    if (data.consultations && Array.isArray(data.consultations)) {
+    if (data.consultations && Array.isArray(data.consultations) && data.consultations.length > 0) {
       StorageService.saveConsultations(data.consultations);
     }
-    if (data.collaborations && Array.isArray(data.collaborations)) {
+    if (data.collaborations && Array.isArray(data.collaborations) && data.collaborations.length > 0) {
       StorageService.saveCollaborations(data.collaborations);
     }
-    if (data.cases && Array.isArray(data.cases)) {
+    if (data.cases && Array.isArray(data.cases) && data.cases.length > 0) {
       StorageService.saveCases(data.cases);
     }
-    if (data.profile && typeof data.profile === 'object') {
+    if (data.profile && typeof data.profile === 'object' && Object.keys(data.profile).length > 0) {
       StorageService.saveProfile(data.profile);
     }
   },
