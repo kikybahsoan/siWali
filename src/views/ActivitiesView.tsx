@@ -35,6 +35,8 @@ import {
 interface ActivitiesViewProps {
   activities: ActivityLog[];
   profile: SchoolProfile;
+  isAdmin?: boolean;
+  onRequireAdmin?: () => void;
   onSaveActivity: (activity: ActivityLog) => void;
   onDeleteActivity: (id: string) => void;
   onPrintActivities?: (activities: ActivityLog[], title: string) => void;
@@ -57,6 +59,8 @@ const CATEGORY_OPTIONS: { label: ActivityCategory; type: ActivityType; icon: any
 export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
   activities,
   profile,
+  isAdmin = false,
+  onRequireAdmin,
   onSaveActivity,
   onDeleteActivity,
   onPrintActivities,
@@ -77,6 +81,10 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
 
   // Quick Template Handler
   const handleApplyTemplate = (categoryName: string, type: ActivityType) => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     const today = new Date().toISOString().substring(0, 10);
     const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const currentDay = dayNames[new Date().getDay()];
@@ -145,6 +153,10 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
   };
 
   const handleOpenNew = () => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     const today = new Date().toISOString().substring(0, 10);
     const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const currentDay = dayNames[new Date().getDay()];
@@ -175,6 +187,10 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
   };
 
   const handleOpenEdit = (act: ActivityLog) => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     setEditingActivity(JSON.parse(JSON.stringify(act)));
     setIsCreatingNew(false);
   };
@@ -542,22 +558,24 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
                       <ChevronRight className="w-3.5 h-3.5" />
                     </button>
 
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenEdit(act)}
-                        title="Edit Kegiatan"
-                        className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setActivityToDelete(act)}
-                        title="Hapus Kegiatan"
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    {isAdmin ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleOpenEdit(act)}
+                          title="Edit Kegiatan"
+                          className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setActivityToDelete(act)}
+                          title="Hapus Kegiatan"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -990,35 +1008,43 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
 
               {/* Action Buttons */}
               <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
-                <button
-                  onClick={() => {
-                    const act = viewingActivity;
-                    setViewingActivity(null);
-                    setActivityToDelete(act);
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
-                  title="Hapus Kegiatan"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Hapus Kegiatan</span>
-                </button>
-
-                <div className="flex items-center gap-2">
+                {isAdmin ? (
                   <button
                     onClick={() => {
                       const act = viewingActivity;
                       setViewingActivity(null);
-                      handleOpenEdit(act);
+                      setActivityToDelete(act);
                     }}
-                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold flex items-center gap-1.5"
+                    className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                    title="Hapus Kegiatan"
                   >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>Edit Kegiatan</span>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Kegiatan</span>
                   </button>
+                ) : (
+                  <span className="text-xs text-slate-500 italic">
+                    Mode Tamu (Hanya Lihat)
+                  </span>
+                )}
+
+                <div className="flex items-center gap-2">
+                  {isAdmin ? (
+                    <button
+                      onClick={() => {
+                        const act = viewingActivity;
+                        setViewingActivity(null);
+                        handleOpenEdit(act);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold flex items-center gap-1.5"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Edit Kegiatan</span>
+                    </button>
+                  ) : null}
 
                   <button
                     onClick={() => setViewingActivity(null)}
-                    className="px-5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white font-semibold"
+                    className="px-5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white font-semibold text-xs sm:text-sm"
                   >
                     Tutup
                   </button>

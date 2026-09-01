@@ -35,6 +35,8 @@ import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 interface StudentsViewProps {
   students: Student[];
   profile?: SchoolProfile;
+  isAdmin?: boolean;
+  onRequireAdmin?: () => void;
   onSaveStudent: (student: Student) => void;
   onDeleteStudent: (id: string) => void;
   onPrintStudent: (student: Student) => void;
@@ -45,6 +47,8 @@ interface StudentsViewProps {
 export const StudentsView: React.FC<StudentsViewProps> = ({
   students,
   profile,
+  isAdmin = false,
+  onRequireAdmin,
   onSaveStudent,
   onDeleteStudent,
   onPrintStudent,
@@ -85,6 +89,10 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
   // Handle open create new form
   const handleOpenCreateNew = () => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     const newStudent: Student = {
       id: `std-${Date.now()}`,
       no: students.length + 1,
@@ -155,6 +163,10 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   };
 
   const handleOpenEdit = (student: Student) => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     const cloned = JSON.parse(JSON.stringify(student));
     if (!cloned.tkNama && cloned.educationHistory) {
       const tk = cloned.educationHistory.find((e: any) => e.level === 'TK');
@@ -270,8 +282,9 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
           <button
             id="add-student-btn"
-            onClick={handleOpenCreateNew}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold shadow-sm transition-all active:scale-95 self-stretch sm:self-auto justify-center"
+            onClick={isAdmin ? handleOpenCreateNew : (onRequireAdmin || handleOpenCreateNew)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold shadow-sm transition-all active:scale-95 self-stretch sm:self-auto justify-center"
+            title={isAdmin ? 'Tambah data murid baru' : 'Masuk Admin untuk tambah murid'}
           >
             <Plus className="w-4 h-4" />
             + Tambah Murid
@@ -398,14 +411,16 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                 Lihat Detail
               </button>
 
-              <button
-                id={`btn-edit-${st.id}`}
-                onClick={() => handleOpenEdit(st)}
-                className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-700 transition-colors"
-                title="Edit Formulir 4 Seksi"
-              >
-                <Edit className="w-3.5 h-3.5" />
-              </button>
+              {isAdmin && (
+                <button
+                  id={`btn-edit-${st.id}`}
+                  onClick={() => handleOpenEdit(st)}
+                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-700 transition-colors"
+                  title="Edit Formulir 4 Seksi"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                </button>
+              )}
 
               <button
                 id={`btn-print-${st.id}`}
@@ -417,14 +432,16 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                 Cetak Form
               </button>
 
-              <button
-                id={`btn-delete-${st.id}`}
-                onClick={() => setStudentToDelete(st)}
-                className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
-                title="Hapus Data Murid"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              {isAdmin && (
+                <button
+                  id={`btn-delete-${st.id}`}
+                  onClick={() => setStudentToDelete(st)}
+                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                  title="Hapus Data Murid"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -735,31 +752,56 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
             {/* Modal Footer */}
             <div className="p-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  const st = selectedStudentForDetail;
-                  setSelectedStudentForDetail(null);
-                  setStudentToDelete(st);
-                }}
-                className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center gap-1.5 transition-colors border border-rose-200"
-                title="Hapus Murid Ini"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Hapus Murid</span>
-              </button>
-
-              <div className="flex items-center gap-2">
+              {isAdmin ? (
                 <button
+                  type="button"
                   onClick={() => {
                     const st = selectedStudentForDetail;
                     setSelectedStudentForDetail(null);
-                    handleOpenEdit(st);
+                    setStudentToDelete(st);
                   }}
-                  className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold"
+                  className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center gap-1.5 transition-colors border border-rose-200"
+                  title="Hapus Murid Ini"
                 >
-                  Edit Data Lengkap
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Murid</span>
                 </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const st = selectedStudentForDetail;
+                    if (st) onPrintStudent(st);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-900 text-xs font-bold flex items-center gap-1.5 transition-colors border border-blue-200"
+                >
+                  <Printer className="w-3.5 h-3.5 text-blue-700" />
+                  <span>Cetak Form Murid</span>
+                </button>
+              )}
+
+              <div className="flex items-center gap-2">
+                {isAdmin ? (
+                  <button
+                    onClick={() => {
+                      const st = selectedStudentForDetail;
+                      setSelectedStudentForDetail(null);
+                      handleOpenEdit(st);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold"
+                  >
+                    Edit Data Lengkap
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (onRequireAdmin) onRequireAdmin();
+                    }}
+                    className="px-3 py-2 rounded-xl bg-slate-200 hover:bg-blue-100 text-slate-700 hover:text-blue-900 text-xs font-semibold"
+                  >
+                    Edit (Perlu Password)
+                  </button>
+                )}
                 <button
                   onClick={() => setSelectedStudentForDetail(null)}
                   className="px-4 py-2 rounded-xl bg-slate-300 hover:bg-slate-400 text-slate-800 text-xs font-semibold"

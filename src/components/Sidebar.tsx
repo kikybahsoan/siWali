@@ -14,12 +14,17 @@ import {
   ShieldAlert,
   FileSpreadsheet,
   CloudCheck,
+  Lock,
+  LogOut,
+  KeyRound,
+  Eye,
 } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   profile: SchoolProfile;
+  isAdmin: boolean;
   escalatedCount: number;
   totalStudents: number;
   totalActivities?: number;
@@ -27,12 +32,15 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onOpenSheetsSync?: () => void;
   onQuickPrint: () => void;
+  onOpenAuthModal: () => void;
+  onLogoutAdmin: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onTabChange,
   profile,
+  isAdmin,
   escalatedCount,
   totalStudents,
   totalActivities = 0,
@@ -40,6 +48,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onOpenSheetsSync,
   onQuickPrint,
+  onOpenAuthModal,
+  onLogoutAdmin,
 }) => {
   const navItems = [
     {
@@ -162,7 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </p>
           {onOpenSheetsSync && (
             <button
-              onClick={onOpenSheetsSync}
+              onClick={isAdmin ? onOpenSheetsSync : onOpenAuthModal}
               className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between text-xs transition-colors ${
                 isSheetsConfigured
                   ? 'bg-emerald-900/40 text-emerald-200 border border-emerald-500/30 hover:bg-emerald-900/60'
@@ -186,7 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Export & Cetak PDF</span>
           </button>
           <button
-            onClick={onOpenSettings}
+            onClick={isAdmin ? onOpenSettings : onOpenAuthModal}
             className="w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 text-xs text-blue-200 hover:bg-blue-800/50 hover:text-white transition-colors"
           >
             <Settings className="w-4 h-4 text-blue-300" />
@@ -195,8 +205,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </nav>
 
-      {/* User Profile Footer */}
-      <div className="p-4 border-t border-blue-800 bg-[#172e6b]">
+      {/* User Profile & Role Footer */}
+      <div className="p-4 border-t border-blue-800 bg-[#172e6b] space-y-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center font-bold text-white text-xs uppercase shrink-0 shadow-sm ring-2 ring-emerald-400/40">
@@ -216,12 +226,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
           <button
-            onClick={onOpenSettings}
+            onClick={isAdmin ? onOpenSettings : onOpenAuthModal}
             className="p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-blue-800/60 transition-colors shrink-0"
             title="Pengaturan Profil"
           >
             <Settings className="w-4 h-4" />
           </button>
+        </div>
+
+        {/* Role Switcher Bar */}
+        <div className="pt-2 border-t border-blue-800/60 flex items-center justify-between">
+          {isAdmin ? (
+            <div className="w-full flex items-center justify-between bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1.5 rounded-lg">
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-300 font-semibold">
+                <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Mode Admin Aktif</span>
+              </div>
+              <button
+                onClick={onLogoutAdmin}
+                className="text-[10px] bg-red-500/20 hover:bg-red-500/30 text-red-300 hover:text-white px-2 py-0.5 rounded transition-colors font-medium flex items-center gap-1"
+                title="Keluar ke Mode Tamu"
+              >
+                <LogOut className="w-2.5 h-2.5" />
+                <span>Keluar</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuthModal}
+              className="w-full flex items-center justify-center gap-1.5 bg-blue-800/80 hover:bg-blue-700/90 border border-blue-600/50 text-white px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-xs"
+              title="Masukkan kata sandi wali kelas untuk mengedit data"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-amber-300" />
+              <span>Masuk Mode Admin</span>
+            </button>
+          )}
         </div>
       </div>
     </aside>

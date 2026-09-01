@@ -21,6 +21,7 @@ import { CasesView } from './views/CasesView';
 import { JournalView } from './views/JournalView';
 import { PrintDocumentModal, PrintDocType } from './components/PrintDocumentModal';
 import { SheetsSyncModal } from './components/SheetsSyncModal';
+import { AdminAuthModal } from './components/AdminAuthModal';
 import {
   Settings,
   X,
@@ -37,6 +38,34 @@ import {
 export function App() {
   // App Navigation State
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+
+  // Role Based Access Control State (Admin vs Tamu/User)
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('siwali_is_admin') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isAdminAuthModalOpen, setIsAdminAuthModalOpen] = useState<boolean>(false);
+
+  const handleLoginAdmin = () => {
+    setIsAdmin(true);
+    try {
+      sessionStorage.setItem('siwali_is_admin', 'true');
+    } catch {}
+  };
+
+  const handleLogoutAdmin = () => {
+    setIsAdmin(false);
+    try {
+      sessionStorage.removeItem('siwali_is_admin');
+    } catch {}
+  };
+
+  const handleRequireAdmin = () => {
+    setIsAdminAuthModalOpen(true);
+  };
 
   // Core App Data State
   const [profile, setProfile] = useState<SchoolProfile>(StorageService.getProfile());
@@ -136,6 +165,10 @@ export function App() {
       | 'new_student'
       | 'new_activity'
   ) => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     if (action === 'new_consultation') {
       setActiveTab('consultations');
       setIsDirectActionModalOpen(true);
@@ -156,12 +189,20 @@ export function App() {
 
   // Student Actions
   const handleSaveStudent = (st: Student) => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     StorageService.saveStudent(st);
     reloadData();
     triggerAutoPush();
   };
 
   const handleDeleteStudent = (id: string) => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     StorageService.deleteStudent(id);
     reloadData();
     triggerAutoPush();
@@ -175,12 +216,20 @@ export function App() {
 
   // Activity Log Actions
   const handleSaveActivity = (item: ActivityLog) => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     StorageService.saveActivity(item);
     reloadData();
     triggerAutoPush();
   };
 
   const handleDeleteActivity = (id: string) => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     StorageService.deleteActivity(id);
     reloadData();
     triggerAutoPush();
@@ -188,12 +237,20 @@ export function App() {
 
   // Consultation Actions
   const handleSaveConsultation = (item: Consultation) => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     StorageService.saveConsultation(item);
     reloadData();
     triggerAutoPush();
   };
 
   const handleDeleteConsultation = (id: string) => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     StorageService.deleteConsultation(id);
     reloadData();
     triggerAutoPush();
@@ -213,12 +270,20 @@ export function App() {
 
   // Collaboration Actions
   const handleSaveCollaboration = (item: Collaboration) => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     StorageService.saveCollaboration(item);
     reloadData();
     triggerAutoPush();
   };
 
   const handleDeleteCollaboration = (id: string) => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     StorageService.deleteCollaboration(id);
     reloadData();
     triggerAutoPush();
@@ -238,12 +303,20 @@ export function App() {
 
   // Case Actions
   const handleSaveCase = (item: StudentCase) => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     StorageService.saveCase(item);
     reloadData();
     triggerAutoPush();
   };
 
   const handleDeleteCase = (id: string) => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     StorageService.deleteCase(id);
     reloadData();
     triggerAutoPush();
@@ -279,6 +352,10 @@ export function App() {
   // Save Settings
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     StorageService.saveProfile(profileForm);
     setProfile(profileForm);
     setIsSettingsOpen(false);
@@ -286,6 +363,10 @@ export function App() {
   };
 
   const handleResetData = () => {
+    if (!isAdmin) {
+      handleRequireAdmin();
+      return;
+    }
     if (confirm('PERINGATAN: Anda yakin ingin menghapus / mengosongkan semua data (profil siswa, kegiatan pembiasaan, konsultasi, kolaborasi, dan kasus)?')) {
       StorageService.clearAll();
       reloadData();
@@ -305,11 +386,18 @@ export function App() {
           setActiveTab(tab);
         }}
         profile={profile}
+        isAdmin={isAdmin}
         escalatedCount={cases.filter((c) => c.status === 'Eskalasi' || c.isEscalatedToPrincipal).length}
         totalStudents={students.length}
         totalActivities={activities.length}
         isSheetsConfigured={isSheetsConfigured}
-        onOpenSheetsSync={() => setIsSheetsModalOpen(true)}
+        onOpenSheetsSync={() => {
+          if (!isAdmin) {
+            handleRequireAdmin();
+            return;
+          }
+          setIsSheetsModalOpen(true);
+        }}
         onOpenSettings={() => {
           setProfileForm(profile);
           setIsSettingsOpen(true);
@@ -319,6 +407,8 @@ export function App() {
           setPrintPeriod('');
           setIsPrintModalOpen(true);
         }}
+        onOpenAuthModal={handleRequireAdmin}
+        onLogoutAdmin={handleLogoutAdmin}
       />
 
       {/* Main Content Area */}
@@ -327,10 +417,17 @@ export function App() {
         <TopHeader
           profile={profile}
           activeTab={activeTab}
+          isAdmin={isAdmin}
           escalatedCount={cases.filter((c) => c.status === 'Eskalasi' || c.isEscalatedToPrincipal).length}
           isSheetsConfigured={isSheetsConfigured}
           isSheetsSyncing={isSheetsSyncing}
-          onOpenSheetsSync={() => setIsSheetsModalOpen(true)}
+          onOpenSheetsSync={() => {
+            if (!isAdmin) {
+              handleRequireAdmin();
+              return;
+            }
+            setIsSheetsModalOpen(true);
+          }}
           onOpenSettings={() => {
             setProfileForm(profile);
             setIsSettingsOpen(true);
@@ -355,6 +452,10 @@ export function App() {
             }
           }}
           onQuickNewAction={() => {
+            if (!isAdmin) {
+              handleRequireAdmin();
+              return;
+            }
             if (activeTab === 'dashboard') {
               handleQuickAction('new_consultation');
             } else {
@@ -362,6 +463,8 @@ export function App() {
             }
           }}
           onResetData={handleResetData}
+          onOpenAuthModal={handleRequireAdmin}
+          onLogoutAdmin={handleLogoutAdmin}
         />
 
         {/* Scrollable View Area */}
@@ -374,6 +477,8 @@ export function App() {
               cases={cases}
               activities={activities}
               profile={profile}
+              isAdmin={isAdmin}
+              onRequireAdmin={handleRequireAdmin}
               onNavigateToTab={(tab) => setActiveTab(tab)}
               onQuickAction={handleQuickAction}
               onSelectStudent={(st) => {
@@ -390,6 +495,8 @@ export function App() {
             <StudentsView
               students={students}
               profile={profile}
+              isAdmin={isAdmin}
+              onRequireAdmin={handleRequireAdmin}
               onSaveStudent={handleSaveStudent}
               onDeleteStudent={handleDeleteStudent}
               onPrintStudent={handlePrintStudent}
@@ -403,6 +510,8 @@ export function App() {
               activities={activities}
               students={students}
               profile={profile}
+              isAdmin={isAdmin}
+              onRequireAdmin={handleRequireAdmin}
               onSaveActivity={handleSaveActivity}
               onDeleteActivity={handleDeleteActivity}
               isOpenNewDirectly={isDirectActionModalOpen}
@@ -415,6 +524,8 @@ export function App() {
               consultations={consultations}
               students={students}
               profile={profile}
+              isAdmin={isAdmin}
+              onRequireAdmin={handleRequireAdmin}
               onSaveConsultation={handleSaveConsultation}
               onDeleteConsultation={handleDeleteConsultation}
               onPrintConsultationReport={handlePrintConsultationReport}
@@ -428,6 +539,8 @@ export function App() {
               collaborations={collaborations}
               students={students}
               profile={profile}
+              isAdmin={isAdmin}
+              onRequireAdmin={handleRequireAdmin}
               onSaveCollaboration={handleSaveCollaboration}
               onDeleteCollaboration={handleDeleteCollaboration}
               onPrintCollaborationReport={handlePrintCollaborationReport}
@@ -441,6 +554,8 @@ export function App() {
               cases={cases}
               students={students}
               profile={profile}
+              isAdmin={isAdmin}
+              onRequireAdmin={handleRequireAdmin}
               selectedCaseId={selectedCaseIdForView}
               onSaveCase={handleSaveCase}
               onDeleteCase={handleDeleteCase}
@@ -746,6 +861,13 @@ export function App() {
         onSyncComplete={() => {
           reloadData();
         }}
+      />
+
+      {/* Admin Authentication Password Modal */}
+      <AdminAuthModal
+        isOpen={isAdminAuthModalOpen}
+        onClose={() => setIsAdminAuthModalOpen(false)}
+        onAuthenticated={handleLoginAdmin}
       />
     </div>
   );

@@ -89,6 +89,8 @@ interface CasesViewProps {
   cases: StudentCase[];
   students: Student[];
   profile: SchoolProfile;
+  isAdmin?: boolean;
+  onRequireAdmin?: () => void;
   selectedCaseId?: string | null;
   onSaveCase: (studentCase: StudentCase) => void;
   onDeleteCase: (id: string) => void;
@@ -101,6 +103,8 @@ export const CasesView: React.FC<CasesViewProps> = ({
   cases,
   students,
   profile,
+  isAdmin = false,
+  onRequireAdmin,
   selectedCaseId,
   onSaveCase,
   onDeleteCase,
@@ -154,6 +158,10 @@ export const CasesView: React.FC<CasesViewProps> = ({
   }, [cases, statusFilter]);
 
   const handleOpenNewCase = () => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     setFormStudentId(students[0]?.id || '');
     setFormTitle('');
     setFormDescription('');
@@ -210,6 +218,10 @@ export const CasesView: React.FC<CasesViewProps> = ({
 
   // Open Step Update
   const handleOpenStepUpdate = (stepNum: SopStepNumber) => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     if (!selectedCase) return;
     setTargetStepToUpdate(stepNum);
     const existingLog = selectedCase.logs.find((l) => l.step === stepNum);
@@ -475,13 +487,15 @@ export const CasesView: React.FC<CasesViewProps> = ({
                     Cetak Jurnal SOP
                   </button>
 
-                  <button
-                    onClick={() => setCaseToDelete(selectedCase)}
-                    className="p-2 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
-                    title="Hapus Kasus"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setCaseToDelete(selectedCase)}
+                      className="p-2 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                      title="Hapus Kasus"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 

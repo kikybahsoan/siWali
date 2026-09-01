@@ -43,6 +43,8 @@ interface CollaborationsViewProps {
   collaborations: Collaboration[];
   students: Student[];
   profile: SchoolProfile;
+  isAdmin?: boolean;
+  onRequireAdmin?: () => void;
   onSaveCollaboration: (collab: Collaboration) => void;
   onDeleteCollaboration: (id: string) => void;
   onPrintCollaborationReport: (period: string, studentId?: string) => void;
@@ -54,6 +56,8 @@ export const CollaborationsView: React.FC<CollaborationsViewProps> = ({
   collaborations,
   students,
   profile,
+  isAdmin = false,
+  onRequireAdmin,
   onSaveCollaboration,
   onDeleteCollaboration,
   onPrintCollaborationReport,
@@ -82,6 +86,10 @@ export const CollaborationsView: React.FC<CollaborationsViewProps> = ({
 
   // Handle open add
   const handleOpenAdd = () => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     setEditingItem(null);
     setFormDate(getTodayDateString());
     setFormCollaborators(['Guru BK']);
@@ -95,6 +103,10 @@ export const CollaborationsView: React.FC<CollaborationsViewProps> = ({
   };
 
   const handleOpenEdit = (item: Collaboration) => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     setEditingItem(item);
     setFormDate(item.date);
     setFormCollaborators(item.collaborators || []);
@@ -372,24 +384,26 @@ export const CollaborationsView: React.FC<CollaborationsViewProps> = ({
               <span className="text-[11px] text-slate-400">
                 Guru Wali: {profile.homeroomTeacherName}
               </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  id={`edit-collab-${item.id}`}
-                  onClick={() => handleOpenEdit(item)}
-                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 text-xs font-semibold flex items-center gap-1 px-2.5 transition-colors"
-                >
-                  <Edit className="w-3.5 h-3.5" />
-                  <span>Edit</span>
-                </button>
-                <button
-                  id={`delete-collab-${item.id}`}
-                  onClick={() => setItemToDelete(item)}
-                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
-                  title="Hapus Catatan Kolaborasi"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              {isAdmin ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    id={`edit-collab-${item.id}`}
+                    onClick={() => handleOpenEdit(item)}
+                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 text-xs font-semibold flex items-center gap-1 px-2.5 transition-colors"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    id={`delete-collab-${item.id}`}
+                    onClick={() => setItemToDelete(item)}
+                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                    title="Hapus Catatan Kolaborasi"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         ))}

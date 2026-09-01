@@ -58,6 +58,8 @@ interface DashboardViewProps {
   cases: StudentCase[];
   activities?: ActivityLog[];
   profile: SchoolProfile;
+  isAdmin?: boolean;
+  onRequireAdmin?: () => void;
   onNavigateToTab?: (tab: TabType) => void;
   onNavigate?: (tab: TabType) => void;
   onQuickAction?: (action: 'new_consultation' | 'new_collaboration' | 'new_case' | 'new_student' | 'new_activity') => void;
@@ -75,6 +77,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   cases,
   activities = [],
   profile,
+  isAdmin = false,
+  onRequireAdmin,
   onNavigateToTab,
   onNavigate,
   onQuickAction,
@@ -94,18 +98,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   const handleCreateConsultation = () => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     if (onOpenNewConsultation) onOpenNewConsultation();
     else if (onQuickAction) onQuickAction('new_consultation');
     else navigate('consultations');
   };
 
   const handleCreateCollaboration = () => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     if (onOpenNewCollaboration) onOpenNewCollaboration();
     else if (onQuickAction) onQuickAction('new_collaboration');
     else navigate('collaborations');
   };
 
   const handleCreateCase = () => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     if (onOpenNewCase) onOpenNewCase();
     else if (onQuickAction) onQuickAction('new_case');
     else navigate('cases');

@@ -22,6 +22,8 @@ interface ConsultationsViewProps {
   consultations: Consultation[];
   students: Student[];
   profile: SchoolProfile;
+  isAdmin?: boolean;
+  onRequireAdmin?: () => void;
   onSaveConsultation: (consultation: Consultation) => void;
   onDeleteConsultation: (id: string) => void;
   onPrintConsultationReport: (period: string, studentId?: string) => void;
@@ -33,6 +35,8 @@ export const ConsultationsView: React.FC<ConsultationsViewProps> = ({
   consultations,
   students,
   profile,
+  isAdmin = false,
+  onRequireAdmin,
   onSaveConsultation,
   onDeleteConsultation,
   onPrintConsultationReport,
@@ -58,6 +62,10 @@ export const ConsultationsView: React.FC<ConsultationsViewProps> = ({
 
   // Open Add Modal
   const handleOpenAdd = () => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     setEditingItem(null);
     setFormStudentId(students[0]?.id || '');
     setFormDate(getTodayDateString());
@@ -68,6 +76,10 @@ export const ConsultationsView: React.FC<ConsultationsViewProps> = ({
   };
 
   const handleOpenEdit = (item: Consultation) => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
     setEditingItem(item);
     setFormStudentId(item.studentId);
     setFormDate(item.date);
@@ -156,7 +168,8 @@ export const ConsultationsView: React.FC<ConsultationsViewProps> = ({
             <button
               id="add-consultation-btn"
               onClick={handleOpenAdd}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-800 hover:bg-blue-900 text-white text-xs font-bold shadow-sm transition-all active:scale-95"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold shadow-sm transition-all active:scale-95"
+              title={isAdmin ? 'Catat konsultasi baru' : 'Masuk Admin untuk catat konsultasi'}
             >
               <Plus className="w-4 h-4" />
               + Catat Konsultasi
@@ -302,24 +315,26 @@ export const ConsultationsView: React.FC<ConsultationsViewProps> = ({
               <span className="text-[11px] text-slate-400">
                 Guru Wali: {profile.homeroomTeacherName}
               </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  id={`edit-consultation-${item.id}`}
-                  onClick={() => handleOpenEdit(item)}
-                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-700 text-xs font-semibold flex items-center gap-1 px-2.5 transition-colors"
-                >
-                  <Edit className="w-3.5 h-3.5" />
-                  <span>Edit</span>
-                </button>
-                <button
-                  id={`delete-consultation-${item.id}`}
-                  onClick={() => setItemToDelete(item)}
-                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
-                  title="Hapus Catatan Konsultasi"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              {isAdmin ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    id={`edit-consultation-${item.id}`}
+                    onClick={() => handleOpenEdit(item)}
+                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-700 text-xs font-semibold flex items-center gap-1 px-2.5 transition-colors"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    id={`delete-consultation-${item.id}`}
+                    onClick={() => setItemToDelete(item)}
+                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                    title="Hapus Catatan Konsultasi"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         ))}
