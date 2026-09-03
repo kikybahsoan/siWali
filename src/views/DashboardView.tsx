@@ -6,6 +6,7 @@ import {
   StudentCase,
   SchoolProfile,
   ActivityLog,
+  ActivityType,
 } from '../types';
 import { TabType } from '../components/BottomNav';
 import { DriveImage } from '../components/DriveImage';
@@ -33,6 +34,19 @@ import {
   Flame,
   ArrowUpRight,
   ShieldCheck,
+  Image as ImageIcon,
+  Camera,
+  Eye,
+  Clock,
+  User,
+  Tag,
+  X,
+  ExternalLink,
+  Layers,
+  Filter,
+  Check,
+  BarChart3,
+  PieChart as PieChartIcon,
 } from 'lucide-react';
 import { formatIndonesianDate } from '../utils/formatters';
 import {
@@ -89,8 +103,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenNewCase,
 }) => {
   const [tableSearch, setTableSearch] = useState<string>('');
-  const [chartRombelFilter, setChartRombelFilter] = useState<string>('ALL');
-  const [chartMetricView, setChartMetricView] = useState<'all' | 'academic' | 'discipline' | 'religious'>('all');
+  const [galleryFilter, setGalleryFilter] = useState<'ALL' | ActivityType | 'WITH_PHOTO'>('ALL');
+  const [previewActivity, setPreviewActivity] = useState<ActivityLog | null>(null);
 
   const navigate = (tab: TabType) => {
     if (onNavigateToTab) onNavigateToTab(tab);
@@ -127,6 +141,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     else navigate('cases');
   };
 
+  const handleCreateActivity = () => {
+    if (!isAdmin && onRequireAdmin) {
+      onRequireAdmin();
+      return;
+    }
+    if (onQuickAction) onQuickAction('new_activity');
+    else navigate('activities');
+  };
+
   // Calculations
   const totalStudents = students.length;
   const currentMonth = new Date().toISOString().substring(0, 7);
@@ -144,83 +167,84 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const harianCount = activities.filter((a) => a.type === 'Harian').length;
   const mingguanCount = activities.filter((a) => a.type === 'Mingguan').length;
   const bulananCount = activities.filter((a) => a.type === 'Bulanan').length;
+  const activitiesWithPhotoCount = activities.filter(
+    (a) => a.photoUrl && a.photoUrl.trim().length > 0
+  ).length;
 
-  // Dynamic Progress Data for Charts (Based on real counts and rombel adjustment)
-  const progressionChartData = useMemo(() => {
-    const baseMultiplier =
-      chartRombelFilter === '10-DKV-1'
-        ? 1.02
-        : chartRombelFilter === '10-DKV-3'
-        ? 0.98
-        : chartRombelFilter === '11-DKV-3'
-        ? 1.04
-        : 1.0;
-
-    return [
-      {
-        month: 'Juli',
-        akademik: Math.round(76 * baseMultiplier),
-        kedisiplinan: Math.round(82 * baseMultiplier),
-        religiLiterasi: Math.round(80 * baseMultiplier),
-        portofolioKarya: Math.round(74 * baseMultiplier),
-      },
-      {
-        month: 'Agustus',
-        akademik: Math.round(79 * baseMultiplier),
-        kedisiplinan: Math.round(85 * baseMultiplier),
-        religiLiterasi: Math.round(84 * baseMultiplier),
-        portofolioKarya: Math.round(78 * baseMultiplier),
-      },
-      {
-        month: 'September',
-        akademik: Math.round(83 * baseMultiplier),
-        kedisiplinan: Math.round(88 * baseMultiplier),
-        religiLiterasi: Math.round(89 * baseMultiplier),
-        portofolioKarya: Math.round(82 * baseMultiplier),
-      },
-      {
-        month: 'Oktober',
-        akademik: Math.round(85 * baseMultiplier),
-        kedisiplinan: Math.round(91 * baseMultiplier),
-        religiLiterasi: Math.round(92 * baseMultiplier),
-        portofolioKarya: Math.round(86 * baseMultiplier),
-      },
-      {
-        month: 'November',
-        akademik: Math.round(88 * baseMultiplier),
-        kedisiplinan: Math.round(93 * baseMultiplier),
-        religiLiterasi: Math.round(94 * baseMultiplier),
-        portofolioKarya: Math.round(90 * baseMultiplier),
-      },
-      {
-        month: 'Desember (Kini)',
-        akademik: Math.round(91 * baseMultiplier),
-        kedisiplinan: Math.round(96 * baseMultiplier),
-        religiLiterasi: Math.round(96 * baseMultiplier),
-        portofolioKarya: Math.round(93 * baseMultiplier),
-      },
-    ];
-  }, [chartRombelFilter]);
-
-  // Activity Distribution Data
-  const activityDistributionData = useMemo(() => {
-    const sholatDhuhaCount = activities.filter((a) => a.category?.includes('Religi')).length;
-    const literasiCount = activities.filter((a) => a.category?.includes('Literasi')).length;
-    const kebersihanCount = activities.filter((a) => a.category?.includes('Kebersihan')).length;
-    const olahragaCount = activities.filter((a) => a.category?.includes('Senam') || a.category?.includes('Olahraga')).length;
-    const upacaraCount = activities.filter((a) => a.category?.includes('Upacara') || a.category?.includes('Apel')).length;
-    const parentingCount = activities.filter((a) => a.category?.includes('Parenting') || a.category?.includes('Paguyuban')).length;
-
-    return [
-      { name: 'Sholat Dhuha / Religi', count: sholatDhuhaCount, target: 20, fill: '#10B981' },
-      { name: 'Literasi Pagi DKV', count: literasiCount, target: 16, fill: '#3B82F6' },
-      { name: 'Kebersihan & Studio', count: kebersihanCount, target: 15, fill: '#06B6D4' },
-      { name: 'Senam / Olahraga', count: olahragaCount, target: 10, fill: '#F43F5E' },
-      { name: 'Upacara / Apel', count: upacaraCount, target: 8, fill: '#6366F1' },
-      { name: 'Parenting / Paguyuban', count: parentingCount, target: 4, fill: '#8B5CF6' },
-    ];
+  const totalActivityAttendance = useMemo(() => {
+    return activities.reduce((acc, a) => acc + (a.actualAttendanceCount || 0), 0);
   }, [activities]);
 
+  const avgAttendancePerSession = useMemo(() => {
+    if (activities.length === 0) return 0;
+    return Math.round(totalActivityAttendance / activities.length);
+  }, [activities, totalActivityAttendance]);
+
+  // Gallery Filtered Activities
+  const filteredGalleryActivities = useMemo(() => {
+    let list = [...activities];
+    if (galleryFilter === 'WITH_PHOTO') {
+      list = list.filter((a) => a.photoUrl && a.photoUrl.trim().length > 0);
+    } else if (galleryFilter !== 'ALL') {
+      list = list.filter((a) => a.type === galleryFilter);
+    }
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [activities, galleryFilter]);
+
+  // Activity Distribution Data (Bar Chart)
+  const activityDistributionData = useMemo(() => {
+    const categoriesMap: { [key: string]: { label: string; target: number; fill: string } } = {
+      'Religi': { label: 'Sholat Dhuha / Religi', target: 20, fill: '#10B981' },
+      'Literasi': { label: 'Literasi Pagi DKV', target: 16, fill: '#3B82F6' },
+      'Kebersihan': { label: 'Kebersihan 5R Studio', target: 15, fill: '#06B6D4' },
+      'Senam': { label: 'Senam / Olahraga', target: 10, fill: '#F43F5E' },
+      'Upacara': { label: 'Upacara / Apel', target: 8, fill: '#6366F1' },
+      'Parenting': { label: 'Parenting / Paguyuban', target: 4, fill: '#8B5CF6' },
+      'Evaluasi': { label: 'Refleksi Perwalian', target: 6, fill: '#F59E0B' },
+      'Bimbingan': { label: 'Bimbingan Klasikal', target: 6, fill: '#EC4899' },
+    };
+
+    return Object.keys(categoriesMap).map((catKey) => {
+      const catConfig = categoriesMap[catKey];
+      const matched = activities.filter(
+        (a) => a.category?.toLowerCase().includes(catKey.toLowerCase())
+      );
+      const count = matched.length;
+      const totalAttendance = matched.reduce(
+        (acc, curr) => acc + (curr.actualAttendanceCount || 0),
+        0
+      );
+      const avgAttendance = count > 0 ? Math.round(totalAttendance / count) : 0;
+
+      return {
+        key: catKey,
+        name: catConfig.label,
+        count: count,
+        target: catConfig.target,
+        avgAttendance: avgAttendance,
+        fill: catConfig.fill,
+      };
+    });
+  }, [activities]);
+
+  // Activity Type Pie Data
+  const activityTypePieData = useMemo(() => {
+    const data = [
+      { name: 'Harian', value: harianCount, color: '#10B981' },
+      { name: 'Mingguan', value: mingguanCount, color: '#3B82F6' },
+      { name: 'Bulanan', value: bulananCount, color: '#8B5CF6' },
+    ];
+    return data.some((d) => d.value > 0)
+      ? data
+      : [{ name: 'Belum Ada Kegiatan', value: 1, color: '#CBD5E1' }];
+  }, [harianCount, mingguanCount, bulananCount]);
+
+  // Most active category
+  const mostActiveCategory = useMemo(() => {
+    if (activityDistributionData.length === 0) return '-';
+    const sorted = [...activityDistributionData].sort((a, b) => b.count - a.count);
+    return sorted[0]?.count > 0 ? sorted[0].name : 'Sholat Dhuha / Religi';
+  }, [activityDistributionData]);
 
   // Case Pathway Pie Data
   const caseStatusPieData = useMemo(() => {
@@ -245,6 +269,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       (s.guardianName && s.guardianName.toLowerCase().includes(q))
     );
   });
+
+  const getCategoryIcon = (category: string) => {
+    const cat = category?.toLowerCase() || '';
+    if (cat.includes('religi') || cat.includes('dhuha')) return <Sun className="w-4 h-4 text-emerald-600" />;
+    if (cat.includes('literasi')) return <BookOpen className="w-4 h-4 text-blue-600" />;
+    if (cat.includes('kebersihan') || cat.includes('lingkungan')) return <Sparkle className="w-4 h-4 text-cyan-600" />;
+    if (cat.includes('senam') || cat.includes('olahraga')) return <Dumbbell className="w-4 h-4 text-rose-600" />;
+    if (cat.includes('upacara') || cat.includes('apel')) return <Building className="w-4 h-4 text-indigo-600" />;
+    if (cat.includes('parenting') || cat.includes('wali')) return <HeartHandshake className="w-4 h-4 text-purple-600" />;
+    if (cat.includes('refleksi') || cat.includes('evaluasi')) return <Flame className="w-4 h-4 text-amber-600" />;
+    return <CalendarCheck className="w-4 h-4 text-blue-600" />;
+  };
 
   return (
     <div className="space-y-6 pb-20 max-w-7xl mx-auto">
@@ -398,67 +434,276 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* SECTION: GRAFIK PENINGKATAN & PERKEMBANGAN MURID */}
+      {/* SECTION 1: GALERI KEGIATAN PEMBIASAAN & PROGRAM WALI */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800">
+                <Camera className="w-4 h-4" />
+              </div>
+              <h3 className="font-bold text-slate-900 text-base sm:text-lg">
+                Galeri Kegiatan Pembiasaan & Program Wali
+              </h3>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {activities.length} Kegiatan
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Dokumentasi visual pembiasaan Sholat Dhuha, Literasi Pagi DKV, Kebersihan 5R Studio, Kebugaran, dan Paguyuban Kelas
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => navigate('activities')}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5"
+            >
+              <span>Buka Menu Kegiatan</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleCreateActivity}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>+ Tambah Kegiatan</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex flex-wrap items-center gap-1.5 mt-4">
+          <span className="text-xs font-semibold text-slate-500 mr-1 flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5 text-slate-400" /> Filter:
+          </span>
+          <button
+            onClick={() => setGalleryFilter('ALL')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              galleryFilter === 'ALL'
+                ? 'bg-blue-800 text-white shadow-xs'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+            }`}
+          >
+            Semua ({activities.length})
+          </button>
+          <button
+            onClick={() => setGalleryFilter('Harian')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              galleryFilter === 'Harian'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800'
+            }`}
+          >
+            Harian ({harianCount})
+          </button>
+          <button
+            onClick={() => setGalleryFilter('Mingguan')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              galleryFilter === 'Mingguan'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-blue-50 hover:bg-blue-100 text-blue-800'
+            }`}
+          >
+            Mingguan ({mingguanCount})
+          </button>
+          <button
+            onClick={() => setGalleryFilter('Bulanan')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              galleryFilter === 'Bulanan'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'bg-purple-50 hover:bg-purple-100 text-purple-800'
+            }`}
+          >
+            Bulanan ({bulananCount})
+          </button>
+          <button
+            onClick={() => setGalleryFilter('WITH_PHOTO')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              galleryFilter === 'WITH_PHOTO'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-800'
+            }`}
+          >
+            📸 Berfoto ({activitiesWithPhotoCount})
+          </button>
+        </div>
+
+        {/* Gallery Cards Grid */}
+        {filteredGalleryActivities.length === 0 ? (
+          <div className="py-12 text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 mt-4">
+            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+              <ImageIcon className="w-6 h-6" />
+            </div>
+            <p className="text-sm font-semibold text-slate-700">Belum ada kegiatan pada filter ini</p>
+            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+              Tambahkan kegiatan pembiasaan baru atau ubah filter untuk menampilkan data lainnya.
+            </p>
+            <button
+              onClick={handleCreateActivity}
+              className="mt-4 px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors inline-flex items-center gap-1.5"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Tambah Kegiatan Pembiasaan</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
+            {filteredGalleryActivities.slice(0, 8).map((act) => {
+              const typeBadgeColor =
+                act.type === 'Harian'
+                  ? 'bg-emerald-500 text-white'
+                  : act.type === 'Mingguan'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-purple-600 text-white';
+
+              const hasPhoto = act.photoUrl && act.photoUrl.trim().length > 0;
+
+              return (
+                <div
+                  key={act.id}
+                  onClick={() => setPreviewActivity(act)}
+                  className="group bg-slate-50/60 hover:bg-white rounded-xl border border-slate-200 hover:border-emerald-300 hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col cursor-pointer"
+                >
+                  {/* Photo Preview Container */}
+                  <div className="h-40 w-full bg-slate-200 relative overflow-hidden shrink-0">
+                    {hasPhoto ? (
+                      <DriveImage
+                        src={act.photoUrl}
+                        alt={act.title}
+                        preset="card"
+                        fallbackType="custom"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-slate-100 via-emerald-50/50 to-blue-50/50 flex flex-col items-center justify-center p-4 text-center">
+                        <div className="p-3 rounded-2xl bg-white shadow-2xs text-emerald-700 mb-2 group-hover:scale-110 transition-transform">
+                          {getCategoryIcon(act.category)}
+                        </div>
+                        <span className="text-[11px] font-semibold text-slate-600 line-clamp-1">
+                          {act.category}
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">Dokumentasi Terjadwal</span>
+                      </div>
+                    )}
+
+                    {/* Top Overlay Badges */}
+                    <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shadow-xs ${typeBadgeColor}`}>
+                        {act.type}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-900/70 text-white backdrop-blur-xs">
+                        {act.status}
+                      </span>
+                    </div>
+
+                    {/* Hover Eye Overlay */}
+                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <span className="px-3 py-1.5 rounded-lg bg-white/90 text-slate-900 text-xs font-semibold shadow-md flex items-center gap-1.5 backdrop-blur-xs">
+                        <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Lihat Detail</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Card Body */}
+                  <div className="p-3.5 flex-1 flex flex-col justify-between space-y-2">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mb-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>
+                          {act.dayName ? `${act.dayName}, ` : ''}
+                          {formatIndonesianDate(act.date)}
+                        </span>
+                        {act.time && (
+                          <>
+                            <span>•</span>
+                            <span className="font-mono">{act.time}</span>
+                          </>
+                        )}
+                      </div>
+
+                      <h4 className="text-sm font-bold text-slate-900 line-clamp-1 group-hover:text-emerald-700 transition-colors">
+                        {act.title}
+                      </h4>
+
+                      <p className="text-xs text-slate-600 line-clamp-2 mt-1 leading-relaxed">
+                        {act.description || 'Tidak ada deskripsi rinci.'}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500 flex items-center gap-1 truncate max-w-[130px]">
+                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="truncate">{act.location || 'SMKN 2'}</span>
+                      </span>
+
+                      <span className="font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 shrink-0">
+                        👥 {act.actualAttendanceCount || 36} Hadir
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {filteredGalleryActivities.length > 8 && (
+          <div className="mt-4 pt-3 border-t border-slate-100 text-center">
+            <button
+              onClick={() => navigate('activities')}
+              className="text-xs font-semibold text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
+            >
+              <span>Lihat {filteredGalleryActivities.length - 8} Kegiatan Lainnya di Halaman Kegiatan</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 2: GRAFIK & ANALITIK KETERLAKSANAAN PEMBIASAAN */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Chart (2 cols): Tren Peningkatan Akademik, Karakter & Disiplin */}
+        {/* Main Chart (2 cols): Grafik Realisasi per Kategori Pembiasaan */}
         <div className="lg:col-span-2 bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
               <div>
                 <div className="flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-blue-700" />
+                  <BarChart3 className="w-4 h-4 text-emerald-600" />
                   <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                    Grafik Peningkatan & Perkembangan Murid
+                    Grafik Keterlaksanaan Program Pembiasaan Murid
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Tren kumulatif capaian akademik DKV, kedisiplinan, portofolio karya, dan religi
+                  Realisasi kegiatan terlaksana vs target semester per kategori pembiasaan & program wali
                 </p>
               </div>
 
-              {/* Rombel Filter for Chart */}
               <div className="flex items-center gap-2">
-                <select
-                  value={chartRombelFilter}
-                  onChange={(e) => setChartRombelFilter(e.target.value)}
-                  className="px-2.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 bg-white text-slate-700 focus:ring-2 focus:ring-blue-600 shadow-2xs"
-                >
-                  <option value="ALL">Semua Rombel (10 & 11 DKV)</option>
-                  <option value="10-DKV-1">10-DKV-1</option>
-                  <option value="10-DKV-3">10-DKV-3</option>
-                  <option value="11-DKV-3">11-DKV-3</option>
-                </select>
+                <span className="px-2.5 py-1 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Kategori Teraktif: {mostActiveCategory}</span>
+                </span>
               </div>
             </div>
 
-            {/* Recharts Area / Line Chart */}
+            {/* Recharts Bar Chart */}
             <div className="h-72 w-full mt-4">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={progressionChartData}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                <BarChart
+                  data={activityDistributionData}
+                  margin={{ top: 15, right: 10, left: -20, bottom: 25 }}
                 >
-                  <defs>
-                    <linearGradient id="colorAkademik" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorDisiplin" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorReligi" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorPortofolio" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748B' }} />
-                  <YAxis domain={[50, 100]} tick={{ fontSize: 11, fill: '#64748B' }} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 10.5, fill: '#475569' }}
+                    interval={0}
+                    angle={-12}
+                    textAnchor="end"
+                  />
+                  <YAxis tick={{ fontSize: 11, fill: '#475569' }} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: '#1E293B',
@@ -467,121 +712,83 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       fontSize: '12px',
                       border: 'none',
                     }}
-                    formatter={(value: any, name: string) => {
-                      const labels: any = {
-                        akademik: 'Akademik Kejuruan DKV',
-                        kedisiplinan: 'Indeks Kedisiplinan (%)',
-                        religiLiterasi: 'Partisipasi Religi & Literasi (%)',
-                        portofolioKarya: 'Mutu Portofolio Desain (%)',
-                      };
-                      return [`${value}%`, labels[name] || name];
-                    }}
+                    formatter={(value: any, name: string) => [
+                      `${value} Sesi`,
+                      name === 'count' ? 'Realisasi Terlaksana' : 'Target Semester',
+                    ]}
                   />
                   <Legend
                     verticalAlign="top"
-                    height={36}
-                    formatter={(val) => {
-                      const labels: any = {
-                        akademik: 'Akademik DKV',
-                        kedisiplinan: 'Kedisiplinan',
-                        religiLiterasi: 'Religi & Literasi',
-                        portofolioKarya: 'Portofolio Desain',
-                      };
-                      return <span className="text-[11px] font-medium text-slate-700">{labels[val] || val}</span>;
-                    }}
+                    height={32}
+                    formatter={(val) => (
+                      <span className="text-xs text-slate-700 font-medium">
+                        {val === 'count' ? 'Realisasi Terlaksana' : 'Target Semester'}
+                      </span>
+                    )}
                   />
-                  <Area
-                    type="monotone"
-                    dataKey="akademik"
-                    stroke="#2563EB"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#colorAkademik)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="kedisiplinan"
-                    stroke="#10B981"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#colorDisiplin)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="religiLiterasi"
-                    stroke="#8B5CF6"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#colorReligi)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="portofolioKarya"
-                    stroke="#F59E0B"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#colorPortofolio)"
-                  />
-                </AreaChart>
+                  <Bar dataKey="count" fill="#10B981" radius={[6, 6, 0, 0]} name="count" />
+                  <Bar dataKey="target" fill="#E2E8F0" radius={[6, 6, 0, 0]} name="target" />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
+          {/* Quick Stats Grid under Chart */}
           <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
-            <div className="p-2 bg-blue-50/60 rounded-xl border border-blue-100">
-              <p className="text-[10px] text-blue-700 font-semibold uppercase">Akademik</p>
-              <p className="text-base font-bold text-blue-900 mt-0.5">91% (+15%)</p>
+            <div className="p-2.5 bg-emerald-50/70 rounded-xl border border-emerald-100">
+              <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-tight">Total Terlaksana</p>
+              <p className="text-base font-bold text-emerald-900 mt-0.5">{activities.length} Sesi</p>
             </div>
-            <div className="p-2 bg-emerald-50/60 rounded-xl border border-emerald-100">
-              <p className="text-[10px] text-emerald-700 font-semibold uppercase">Disiplin</p>
-              <p className="text-base font-bold text-emerald-900 mt-0.5">96% (+14%)</p>
+            <div className="p-2.5 bg-blue-50/70 rounded-xl border border-blue-100">
+              <p className="text-[10px] text-blue-700 font-semibold uppercase tracking-tight">Rata-rata Hadir</p>
+              <p className="text-base font-bold text-blue-900 mt-0.5">{avgAttendancePerSession} Murid/Sesi</p>
             </div>
-            <div className="p-2 bg-purple-50/60 rounded-xl border border-purple-100">
-              <p className="text-[10px] text-purple-700 font-semibold uppercase">Religi & Literasi</p>
-              <p className="text-base font-bold text-purple-900 mt-0.5">96% (+16%)</p>
+            <div className="p-2.5 bg-purple-50/70 rounded-xl border border-purple-100">
+              <p className="text-[10px] text-purple-700 font-semibold uppercase tracking-tight">Dokumentasi Foto</p>
+              <p className="text-base font-bold text-purple-900 mt-0.5">{activitiesWithPhotoCount} Kegiatan</p>
             </div>
-            <div className="p-2 bg-amber-50/60 rounded-xl border border-amber-100">
-              <p className="text-[10px] text-amber-700 font-semibold uppercase">Karya DKV</p>
-              <p className="text-base font-bold text-amber-900 mt-0.5">93% (+19%)</p>
+            <div className="p-2.5 bg-amber-50/70 rounded-xl border border-amber-100">
+              <p className="text-[10px] text-amber-700 font-semibold uppercase tracking-tight">Total Partisipasi</p>
+              <p className="text-base font-bold text-amber-900 mt-0.5">{totalActivityAttendance} Akumulasi</p>
             </div>
           </div>
         </div>
 
-        {/* Side Chart (1 col): Distribusi Penanganan Kasus & SOP */}
+        {/* Side Chart (1 col): Proporsi Tipe & Distribusi Penanganan Kasus SOP */}
         <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-purple-700" />
+                <PieChartIcon className="w-4 h-4 text-purple-700" />
                 <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                  Status Bimbingan & SOP
+                  Distribusi Tipe Pembiasaan
                 </h3>
               </div>
               <button
-                onClick={() => navigate('cases')}
+                onClick={() => navigate('activities')}
                 className="text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-0.5"
               >
-                Detail Kasus <ChevronRight className="w-3.5 h-3.5" />
+                Detail <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
             <p className="text-xs text-slate-500 mt-2">
-              Distribusi 14 murid perwalian berdasarkan status SOP bimbingan
+              Proporsi pelaksanaan program harian, mingguan, dan bulanan
             </p>
 
-            <div className="h-48 w-full mt-2 relative">
+            <div className="h-44 w-full mt-2 relative">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={caseStatusPieData}
+                    data={activityTypePieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={45}
-                    outerRadius={75}
+                    innerRadius={42}
+                    outerRadius={70}
                     paddingAngle={4}
                     dataKey="value"
                   >
-                    {caseStatusPieData.map((entry, index) => (
+                    {activityTypePieData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
@@ -592,19 +799,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       color: '#FFFFFF',
                       fontSize: '11px',
                     }}
-                    formatter={(val, name) => [`${val} Murid`, name]}
+                    formatter={(val, name) => [`${val} Kegiatan`, name]}
                   />
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-2xl font-bold text-slate-900">{totalStudents}</span>
-                <span className="text-[10px] text-slate-400 font-medium uppercase">Total Murid</span>
+                <span className="text-2xl font-bold text-slate-900">{activities.length}</span>
+                <span className="text-[10px] text-slate-400 font-medium uppercase">Total</span>
               </div>
             </div>
 
             {/* Legend list */}
             <div className="space-y-2 mt-2 text-xs">
-              {caseStatusPieData.map((item) => (
+              {activityTypePieData.map((item) => (
                 <div key={item.name} className="flex items-center justify-between text-slate-700">
                   <div className="flex items-center gap-2">
                     <span
@@ -619,82 +826,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-100">
+          <div className="mt-4 pt-3 border-t border-slate-100 flex gap-2">
             <button
-              onClick={handleCreateCase}
-              className="w-full py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+              onClick={() => navigate('activities')}
+              className="flex-1 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
             >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Buka Alur Kasus Baru</span>
+              <CalendarCheck className="w-3.5 h-3.5" />
+              <span>Menu Pembiasaan</span>
+            </button>
+            <button
+              onClick={() => navigate('cases')}
+              className="flex-1 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Status SOP ({activeCasesCount})</span>
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* SECTION: GRAFIK PELAKSANAAN KEGIATAN PEMBIASAAN (BAR CHART) */}
-      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-          <div>
-            <div className="flex items-center gap-2">
-              <CalendarCheck className="w-4 h-4 text-emerald-600" />
-              <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                Grafik Pelaksanaan Program Pembiasaan & Kegiatan Wali
-              </h3>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Realisasi keterlaksanaan pembiasaan harian (Sholat Dhuha, Literasi, Kebersihan, Senam), mingguan, dan bulanan
-            </p>
-          </div>
-
-          <button
-            onClick={() => navigate('activities')}
-            className="px-3.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-          >
-            <span>Kelola Kegiatan & Foto Drive</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="h-64 w-full mt-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={activityDistributionData}
-              margin={{ top: 15, right: 10, left: -20, bottom: 25 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 11, fill: '#475569' }}
-                interval={0}
-                angle={-10}
-                textAnchor="end"
-              />
-              <YAxis tick={{ fontSize: 11, fill: '#475569' }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#1E293B',
-                  borderRadius: '10px',
-                  color: '#FFFFFF',
-                  fontSize: '12px',
-                }}
-                formatter={(value: any, name: string) => [
-                  `${value} Kali Pelaksanaan`,
-                  name === 'count' ? 'Realisasi' : 'Target Semester',
-                ]}
-              />
-              <Legend
-                verticalAlign="top"
-                height={30}
-                formatter={(val) => (
-                  <span className="text-xs text-slate-700 font-medium">
-                    {val === 'count' ? 'Realisasi Terlaksana' : 'Target Semester'}
-                  </span>
-                )}
-              />
-              <Bar dataKey="count" fill="#10B981" radius={[6, 6, 0, 0]} name="count" />
-              <Bar dataKey="target" fill="#E2E8F0" radius={[6, 6, 0, 0]} name="target" />
-            </BarChart>
-          </ResponsiveContainer>
         </div>
       </div>
 
@@ -989,6 +1136,141 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Preview Modal for Gallery Item */}
+      {previewActivity && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-200 my-8">
+            {/* Header Image or Banner */}
+            <div className="relative h-64 sm:h-72 w-full bg-slate-900 overflow-hidden">
+              {previewActivity.photoUrl ? (
+                <DriveImage
+                  src={previewActivity.photoUrl}
+                  alt={previewActivity.title}
+                  preset="hero"
+                  fallbackType="custom"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-blue-900 via-indigo-900 to-slate-900 flex flex-col items-center justify-center p-6 text-white text-center">
+                  <div className="p-4 rounded-3xl bg-white/10 backdrop-blur-md mb-3 border border-white/20">
+                    {getCategoryIcon(previewActivity.category)}
+                  </div>
+                  <h3 className="text-xl font-bold">{previewActivity.title}</h3>
+                  <p className="text-xs text-blue-200 mt-1">{previewActivity.category}</p>
+                </div>
+              )}
+
+              {/* Close Button */}
+              <button
+                onClick={() => setPreviewActivity(null)}
+                className="absolute top-3 right-3 p-2 rounded-full bg-slate-900/70 hover:bg-slate-900 text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Badges on Bottom of Image */}
+              <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold shadow-md">
+                  {previewActivity.type}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-slate-900/80 backdrop-blur-xs text-white text-xs font-semibold border border-white/20">
+                  {previewActivity.category}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-blue-600/90 text-white text-xs font-semibold">
+                  Status: {previewActivity.status}
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">{previewActivity.title}</h3>
+                <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-500 mt-1.5 font-medium">
+                  <span className="flex items-center gap-1 text-slate-700">
+                    <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                    {previewActivity.dayName ? `${previewActivity.dayName}, ` : ''}
+                    {formatIndonesianDate(previewActivity.date)}
+                  </span>
+                  {previewActivity.time && (
+                    <span className="flex items-center gap-1 font-mono">
+                      <Clock className="w-3.5 h-3.5 text-blue-600" />
+                      {previewActivity.time}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                    {previewActivity.location || 'SMK Negeri 2 Gorontalo'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Metadata Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Rombel Sasaran</span>
+                  <span className="font-semibold text-slate-800">{previewActivity.rombel || 'Semua Rombel'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Tingkat Kehadiran</span>
+                  <span className="font-semibold text-emerald-700">
+                    👥 {previewActivity.actualAttendanceCount || 36} Murid Hadir
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Guru Pembina / PIC</span>
+                  <span className="font-semibold text-slate-800">
+                    {previewActivity.leaderOrPic || profile.homeroomTeacherName || 'Wali Kelas'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Deskripsi & Pelaksanaan Kegiatan
+                </h4>
+                <p className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                  {previewActivity.description || 'Tidak ada deskripsi rinci.'}
+                </p>
+              </div>
+
+              {/* Outcome / Catatan RTL */}
+              {previewActivity.outcome && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Hasil Ketercapaian / Catatan Tindak Lanjut
+                  </h4>
+                  <p className="text-xs text-slate-700 leading-relaxed bg-emerald-50/50 p-3 rounded-xl border border-emerald-100/80">
+                    {previewActivity.outcome}
+                  </p>
+                </div>
+              )}
+
+              {/* Actions Footer */}
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                <button
+                  onClick={() => setPreviewActivity(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
+                >
+                  Tutup
+                </button>
+                <button
+                  onClick={() => {
+                    setPreviewActivity(null);
+                    navigate('activities');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
+                >
+                  <span>Buka di Halaman Kegiatan</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
