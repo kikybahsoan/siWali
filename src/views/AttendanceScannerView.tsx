@@ -34,6 +34,11 @@ import {
   Upload,
   SwitchCamera,
   Loader2,
+  Flashlight,
+  FlashlightOff,
+  ZoomIn,
+  Scan,
+  Maximize2,
 } from 'lucide-react';
 
 interface AttendanceScannerViewProps {
@@ -115,6 +120,13 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [voiceAnnounce, setVoiceAnnounce] = useState<boolean>(true);
+
+  // High-performance scanner controls
+  const [isTorchSupported, setIsTorchSupported] = useState<boolean>(false);
+  const [isTorchOn, setIsTorchOn] = useState<boolean>(false);
+  const [isZoomSupported, setIsZoomSupported] = useState<boolean>(false);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [scanMode, setScanMode] = useState<'wide' | 'standard'>('wide');
 
   // Form controls for scan session
   const [selectedStatus, setSelectedStatus] = useState<AttendanceStatus>('Hadir');
@@ -281,13 +293,54 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
     }
 
     if (foundStudent) {
+      lastScannedCodeRef.current = cleanText;
+      lastScanTimeRef.current = nowTime;
       handleStudentMatch(foundStudent, cleanText);
     } else {
+      // Don't lockout if invalid code was detected so user can immediately align barcode
+      lastScannedCodeRef.current = '';
       if (soundEnabled) playChime(false);
       setScanNotice({
         type: 'warning',
         text: `Barcode / NISN "${cleanText}" tidak terdaftar pada data 14 murid binaan. Silakan periksa kembali kartu siswa.`,
       });
+    }
+  };
+
+  // Hardware controls for Camera
+  const toggleTorch = async () => {
+    if (!html5QrCodeRef.current) return;
+    try {
+      const caps = html5QrCodeRef.current.getRunningTrackCameraCapabilities();
+      if (caps && caps.torchFeature && caps.torchFeature().isSupported()) {
+        const next = !isTorchOn;
+        await caps.torchFeature().apply(next);
+        setIsTorchOn(next);
+      }
+    } catch (err) {
+      console.warn('Torch toggle error:', err);
+    }
+  };
+
+  const toggleZoom = async () => {
+    if (!html5QrCodeRef.current) return;
+    try {
+      const caps = html5QrCodeRef.current.getRunningTrackCameraCapabilities();
+      if (caps && caps.zoomFeature && caps.zoomFeature().isSupported()) {
+        const nextZoom = zoomLevel >= 2 ? 1 : 2;
+        await caps.zoomFeature().apply(nextZoom);
+        setZoomLevel(nextZoom);
+      }
+    } catch (err) {
+      console.warn('Zoom toggle error:', err);
+    }
+  };
+
+  const toggleScanMode = () => {
+    const nextMode = scanMode === 'wide' ? 'standard' : 'wide';
+    setScanMode(nextMode);
+    if (isCameraActive) {
+      startCamera(selectedCameraId || currentFacingMode);
     }
   };
 
@@ -304,6 +357,7 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
       }
     }
     setIsCameraActive(false);
+    setIsTorchOn(false);
   };
 
   // Start Html5Qrcode scanner with multi-tier fallback (environment -> user -> device)
@@ -314,47 +368,86 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
     // 1. Ensure any previous instance or track is cleanly stopped
     await stopCamera();
 
+    const isMobileDevice = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     const targetFacing = overrideTarget === 'user' || overrideTarget === 'environment'
       ? overrideTarget
-      : currentFacingMode;
+      : (isMobileDevice ? 'environment' : 'user');
 
+    // Rectangular scanbox optimal for both horizontal barcodes (NISN/Code 128) and square QR codes
     const qrConfig = {
-      fps: 15,
+      fps: 25, // 25 FPS high responsiveness
       qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-        const boxSize = Math.max(180, Math.floor(minEdge * 0.72));
-        return { width: boxSize, height: boxSize };
+        const vw = viewfinderWidth || 320;
+        const vh = viewfinderHeight || 320;
+        if (scanMode === 'wide') {
+          // Ultra-wide field of view for rapid barcode capture from any angle/distance
+          const width = Math.min(vw - 16, 420);
+          const height = Math.min(vh - 16, Math.max(180, Math.floor(width * 0.72)));
+          return { width, height };
+        }
+        const minDim = Math.min(vw, vh);
+        const width = Math.min(320, Math.max(200, Math.floor(minDim * 0.82)));
+        const height = Math.min(220, Math.max(140, Math.floor(width * 0.65)));
+        return { width, height };
       },
-      // Note: Omit strict aspectRatio constraint to prevent NotReadableError/OverconstrainedError
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.QR_CODE,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.UPC_A,
-      ],
+      videoConstraints: {
+        facingMode: targetFacing,
+        width: { min: 640, ideal: 1280, max: 1920 },
+        height: { min: 480, ideal: 720, max: 1080 },
+        focusMode: 'continuous',
+      },
+      disableFlip: false,
     };
 
     const handleSuccess = (decodedText: string) => {
       if (!isProcessingRef.current) {
         isProcessingRef.current = true;
+        // Instant haptic feedback vibration on mobile devices
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          try {
+            navigator.vibrate([60, 40, 60]);
+          } catch (e) {}
+        }
         processDecodedText(decodedText);
+        // Ultra-responsive turnaround (350ms) for consecutive cards
         setTimeout(() => {
           isProcessingRef.current = false;
-        }, 1200);
+        }, 350);
       }
     };
 
     try {
       if (!html5QrCodeRef.current) {
-        html5QrCodeRef.current = new Html5Qrcode('qr-code-scanner-reader', { verbose: false });
+        html5QrCodeRef.current = new Html5Qrcode('qr-code-scanner-reader', {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.CODE_93,
+            Html5QrcodeSupportedFormats.CODABAR,
+            Html5QrcodeSupportedFormats.DATA_MATRIX,
+            Html5QrcodeSupportedFormats.ITF,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.PDF_417,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+          ],
+          useBarCodeDetectorIfSupported: true,
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true,
+          },
+          verbose: false,
+        });
       }
 
-      // Try discovering cameras if available, without failing if permission isn't granted yet
+      // Try discovering cameras if available
+      let discoveredDevices: Array<{ id: string; label: string }> = [];
       try {
         const devs = await Html5Qrcode.getCameras();
         if (devs && devs.length > 0) {
-          setAvailableCameras(devs.map((d) => ({ id: d.id, label: d.label || `Kamera ${d.id}` })));
+          discoveredDevices = devs.map((d) => ({ id: d.id, label: d.label || `Kamera ${d.id.slice(0, 8)}` }));
+          setAvailableCameras(discoveredDevices);
         }
       } catch (e) {
         // Enumerate error before permission is safe to ignore
@@ -362,14 +455,29 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
 
       // Build sequential fallback attempts
       const attempts: any[] = [];
+
       if (typeof overrideTarget === 'string' && overrideTarget !== 'environment' && overrideTarget !== 'user') {
+        // Specific device ID requested
         attempts.push(overrideTarget);
-        attempts.push({ facingMode: targetFacing });
-        attempts.push({ facingMode: targetFacing === 'environment' ? 'user' : 'environment' });
+      } else if (selectedCameraId && !overrideTarget) {
+        // Use previously selected device ID
+        attempts.push(selectedCameraId);
+      }
+
+      // Add facing mode configurations
+      if (targetFacing === 'user') {
+        attempts.push({ facingMode: 'user' });
+        attempts.push({ facingMode: 'environment' });
       } else {
-        // Default: try target facing mode, then alternative facing mode
-        attempts.push({ facingMode: targetFacing });
-        attempts.push({ facingMode: targetFacing === 'environment' ? 'user' : 'environment' });
+        attempts.push({ facingMode: 'environment' });
+        attempts.push({ facingMode: 'user' });
+      }
+
+      // Add all discovered hardware devices as last line of defense
+      for (const dev of discoveredDevices) {
+        if (!attempts.includes(dev.id)) {
+          attempts.push(dev.id);
+        }
       }
 
       let started = false;
@@ -386,6 +494,8 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
           started = true;
           if (typeof cameraTarget === 'object' && cameraTarget.facingMode) {
             setCurrentFacingMode(cameraTarget.facingMode);
+          } else if (typeof cameraTarget === 'string') {
+            setSelectedCameraId(cameraTarget);
           }
           break;
         } catch (err: any) {
@@ -397,6 +507,47 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
       if (started) {
         setIsCameraActive(true);
         setCameraError(null);
+
+        // Hardware capabilities detection (torch & zoom)
+        try {
+          const caps = html5QrCodeRef.current.getRunningTrackCameraCapabilities();
+          if (caps && caps.torchFeature && caps.torchFeature().isSupported()) {
+            setIsTorchSupported(true);
+            setIsTorchOn(Boolean(caps.torchFeature().value()));
+          } else {
+            setIsTorchSupported(false);
+          }
+          if (caps && caps.zoomFeature && caps.zoomFeature().isSupported()) {
+            setIsZoomSupported(true);
+            setZoomLevel(caps.zoomFeature().value() || 1);
+          } else {
+            setIsZoomSupported(false);
+          }
+        } catch (e) {
+          setIsTorchSupported(false);
+          setIsZoomSupported(false);
+        }
+
+        // Crucial: ensure the HTML5 video element is active, muted, unpaused, and filled properly
+        setTimeout(() => {
+          const reader = document.getElementById('qr-code-scanner-reader');
+          if (reader) {
+            const vid = reader.querySelector('video') as HTMLVideoElement | null;
+            if (vid) {
+              vid.setAttribute('playsinline', 'true');
+              vid.setAttribute('webkit-playsinline', 'true');
+              vid.muted = true;
+              vid.style.width = '100%';
+              vid.style.height = '100%';
+              vid.style.minHeight = '280px';
+              vid.style.objectFit = 'cover';
+              vid.style.display = 'block';
+              if (vid.paused) {
+                vid.play().catch((playErr) => console.warn('Forced video play notice:', playErr));
+              }
+            }
+          }
+        }, 200);
       } else {
         throw lastErr || new Error('Gagal memulai sumber video kamera');
       }
@@ -415,7 +566,7 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
         friendlyMsg =
           'Kamera fisik tidak terdeteksi pada perangkat ini. Anda dapat menggunakan mode Input Barcode Manual atau USB Scanner Gun di bawah.';
       } else {
-        friendlyMsg = `Kendala akses kamera: ${errMsg}. Silakan gunakan kamera depan atau upload foto barcode di bawah.`;
+        friendlyMsg = `Kendala akses kamera: ${errMsg}. Silakan pilih kamera lain dari daftar pilihan atau upload foto barcode di bawah.`;
       }
 
       setCameraError(friendlyMsg);
@@ -427,9 +578,18 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
 
   // Switch between front and back camera
   const switchCamera = async () => {
-    const nextMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-    setCurrentFacingMode(nextMode);
-    await startCamera(nextMode);
+    if (availableCameras.length > 1) {
+      // Rotate through available cameras
+      const currentIndex = availableCameras.findIndex((c) => c.id === selectedCameraId);
+      const nextIndex = (currentIndex + 1) % availableCameras.length;
+      const nextCam = availableCameras[nextIndex];
+      setSelectedCameraId(nextCam.id);
+      await startCamera(nextCam.id);
+    } else {
+      const nextMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+      setCurrentFacingMode(nextMode);
+      await startCamera(nextMode);
+    }
   };
 
   // Scan directly from uploaded barcode / QR photo or image file
@@ -456,11 +616,52 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
     }
   };
 
-  // Cleanup camera on unmount
+  // Detect available cameras on mount & cleanup on unmount
   useEffect(() => {
+    let isMounted = true;
+    const isMobileDevice = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    setCurrentFacingMode(isMobileDevice ? 'environment' : 'user');
+
+    const enumerateCameras = async () => {
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (isMounted && devices && devices.length > 0) {
+          const formatted = devices.map((d) => ({
+            id: d.id,
+            label: d.label || `Kamera ${d.id.slice(0, 8)}`,
+          }));
+          setAvailableCameras(formatted);
+
+          // Select appropriate camera
+          if (isMobileDevice) {
+            const backCam = formatted.find((c) => /back|rear|belakang|environment/i.test(c.label));
+            setSelectedCameraId(backCam ? backCam.id : formatted[formatted.length - 1].id);
+          } else {
+            // On desktop/laptop, prefer RGB webcam over IR camera
+            const frontCam = formatted.find(
+              (c) => /front|user|integrated|webcam|depan/i.test(c.label) && !/ir|infrared/i.test(c.label)
+            );
+            setSelectedCameraId(frontCam ? frontCam.id : formatted[0].id);
+          }
+        }
+      } catch (e) {
+        // Permission not yet granted by browser; will populate once user initiates
+      }
+    };
+
+    enumerateCameras();
+
     return () => {
+      isMounted = false;
       if (html5QrCodeRef.current) {
-        html5QrCodeRef.current.stop().catch(() => {});
+        try {
+          if (html5QrCodeRef.current.isScanning) {
+            html5QrCodeRef.current.stop().catch(() => {});
+          }
+          html5QrCodeRef.current.clear();
+        } catch (e) {
+          // ignore cleanup errors
+        }
       }
     };
   }, []);
@@ -629,8 +830,33 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
               </div>
             </div>
 
+            {/* Camera Selection Dropdown if multiple sensors detected */}
+            {availableCameras.length > 1 && (
+              <div className="mt-3 flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs text-slate-700">
+                <Camera className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="shrink-0 font-semibold text-slate-600">Sensor Kamera:</span>
+                <select
+                  value={selectedCameraId}
+                  onChange={async (e) => {
+                    const camId = e.target.value;
+                    setSelectedCameraId(camId);
+                    if (isCameraActive) {
+                      await startCamera(camId);
+                    }
+                  }}
+                  className="bg-white text-slate-800 rounded-lg px-2.5 py-1 text-xs border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 flex-1 truncate font-medium"
+                >
+                  {availableCameras.map((cam, idx) => (
+                    <option key={cam.id} value={cam.id}>
+                      {cam.label || `Kamera ${idx + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Camera Viewport */}
-            <div className="mt-4">
+            <div className="mt-3">
               {/* Hidden file input for photo barcode/QR scanning */}
               <input
                 ref={fileInputRef}
@@ -641,54 +867,68 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
               />
 
               <div className="relative bg-slate-950 rounded-2xl overflow-hidden min-h-[320px] sm:min-h-[380px] flex flex-col items-center justify-center border-2 border-dashed border-slate-700">
-                {/* Scanner container for html5-qrcode */}
+                {/* Scanner container for html5-qrcode - MUST ALWAYS have layout dimensions in DOM */}
                 <div
                   id="qr-code-scanner-reader"
-                  className={`w-full max-w-md ${isCameraActive ? 'block' : 'hidden'}`}
+                  className="w-full h-full min-h-[320px] max-w-lg mx-auto flex items-center justify-center"
+                  style={{ minHeight: '320px' }}
                 />
 
+                {/* Loading state overlay */}
                 {isStartingCamera && (
-                  <div className="p-8 text-center flex flex-col items-center justify-center max-w-sm">
+                  <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xs flex flex-col items-center justify-center p-8 text-center z-20">
                     <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mb-3" />
-                    <h3 className="text-white font-bold text-sm">Menghubungkan Kamera...</h3>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      Menginisialisasi sensor video dan modul pemindai barcode.
+                    <h3 className="text-white font-bold text-sm">Menghubungkan Sensor Kamera...</h3>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed max-w-xs">
+                      Mengaktifkan video stream dan memuat engine pembaca barcode.
                     </p>
                   </div>
                 )}
 
+                {/* Ready / Idle state overlay */}
                 {!isCameraActive && !isStartingCamera && (
-                  <div className="p-6 sm:p-8 text-center flex flex-col items-center justify-center max-w-sm">
+                  <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 sm:p-8 text-center z-10">
                     <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center text-emerald-400 mb-3 shadow-inner">
                       <Camera className="w-8 h-8" />
                     </div>
                     <h3 className="text-white font-bold text-base">Kamera Pemindai Siap</h3>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      Aktifkan kamera untuk memindai kartu barcode atau QR siswa secara otomatis.
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed max-w-sm">
+                      Nyalakan kamera untuk memindai kartu barcode atau QR siswa secara otomatis.
                     </p>
 
                     <div className="mt-4 flex flex-col sm:flex-row items-center gap-2 w-full justify-center">
                       <button
-                        onClick={() => startCamera('environment')}
+                        onClick={() => startCamera(selectedCameraId || (typeof navigator !== 'undefined' && /Android|iPhone/i.test(navigator.userAgent) ? 'environment' : 'user'))}
                         className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95"
                       >
                         <Camera className="w-4 h-4" />
-                        <span>Nyalakan Kamera Utama</span>
+                        <span>Nyalakan Kamera Scanner</span>
                       </button>
 
-                      <button
-                        onClick={() => startCamera('user')}
-                        className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors flex items-center justify-center gap-1.5"
-                        title="Gunakan kamera depan atau webcam laptop"
-                      >
-                        <SwitchCamera className="w-3.5 h-3.5" />
-                        <span>Kamera Depan</span>
-                      </button>
+                      {availableCameras.length > 1 ? (
+                        <button
+                          onClick={switchCamera}
+                          className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors flex items-center justify-center gap-1.5"
+                          title="Ganti sensor kamera"
+                        >
+                          <SwitchCamera className="w-3.5 h-3.5" />
+                          <span>Ganti Kamera</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => startCamera('user')}
+                          className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors flex items-center justify-center gap-1.5"
+                          title="Gunakan webcam laptop / kamera depan"
+                        >
+                          <SwitchCamera className="w-3.5 h-3.5" />
+                          <span>Kamera Depan</span>
+                        </button>
+                      )}
                     </div>
 
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      className="mt-2.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1.5 font-medium underline underline-offset-4"
+                      className="mt-3 text-xs text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1.5 font-medium underline underline-offset-4"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>Atau Upload Foto Barcode / QR</span>
@@ -696,22 +936,85 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
                   </div>
                 )}
 
+                {/* Active camera top bar with refresh/switch and diagnostics */}
                 {isCameraActive && (
-                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-auto bg-slate-900/85 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white text-xs gap-2">
+                  <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-auto bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-white text-xs z-30">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                      <span className="font-semibold text-emerald-300 truncate">
-                        Kamera Aktif ({currentFacingMode === 'environment' ? 'Belakang' : 'Depan'})
+                      <span className="font-semibold text-emerald-300 truncate text-[11px] sm:text-xs">
+                        Scanner Berjalan ({currentFacingMode === 'environment' ? 'Belakang' : 'Depan / Webcam'})
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                      {isTorchSupported && (
+                        <button
+                          onClick={toggleTorch}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 border ${
+                            isTorchOn
+                              ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold shadow-xs'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                          }`}
+                          title="Nyalakan senter / flashlight kamera"
+                        >
+                          {isTorchOn ? (
+                            <Flashlight className="w-3 h-3 text-white fill-white" />
+                          ) : (
+                            <FlashlightOff className="w-3 h-3 text-slate-400" />
+                          )}
+                          <span className="hidden sm:inline">Senter</span>
+                        </button>
+                      )}
+
+                      {isZoomSupported && (
+                        <button
+                          onClick={toggleZoom}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 border ${
+                            zoomLevel > 1.2
+                              ? 'bg-emerald-700 text-white border-emerald-500'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                          }`}
+                          title="Ubah pembesaran kamera (Zoom)"
+                        >
+                          <ZoomIn className="w-3 h-3" />
+                          <span>{zoomLevel > 1.2 ? '2x' : '1x'}</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={toggleScanMode}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 border ${
+                          scanMode === 'wide'
+                            ? 'bg-emerald-900/90 text-emerald-300 border-emerald-600'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                        }`}
+                        title="Alihkan mode jangkauan pemindaian"
+                      >
+                        {scanMode === 'wide' ? (
+                          <Maximize2 className="w-3 h-3 text-emerald-400" />
+                        ) : (
+                          <Scan className="w-3 h-3 text-slate-300" />
+                        )}
+                        <span className="hidden sm:inline">
+                          {scanMode === 'wide' ? 'Area Luas (Cepat)' : 'Kotak Fokus'}
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={() => startCamera(selectedCameraId || currentFacingMode)}
+                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold transition-colors flex items-center gap-1 border border-slate-700"
+                        title="Segarkan stream video jika layar tampak hitam"
+                      >
+                        <RefreshCw className="w-3 h-3 text-emerald-400" />
+                        <span className="hidden sm:inline">Segarkan</span>
+                      </button>
+
                       <button
                         onClick={switchCamera}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold transition-colors flex items-center gap-1 border border-slate-700"
-                        title="Ganti kamera depan / belakang"
+                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold transition-colors flex items-center gap-1 border border-slate-700"
+                        title="Ganti kamera depan / belakang / sensor lain"
                       >
-                        <SwitchCamera className="w-3.5 h-3.5" />
+                        <SwitchCamera className="w-3 h-3" />
                         <span className="hidden sm:inline">Ganti</span>
                       </button>
 
@@ -719,9 +1022,22 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
                         onClick={stopCamera}
                         className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-semibold transition-colors flex items-center gap-1"
                       >
-                        <CameraOff className="w-3.5 h-3.5" />
+                        <CameraOff className="w-3 h-3" />
                         <span>Matikan</span>
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Moving Green Laser Beam when camera is active */}
+                {isCameraActive && <div className="scanner-laser-beam" />}
+
+                {/* Active camera bottom reticle guidance */}
+                {isCameraActive && (
+                  <div className="absolute bottom-3 left-3 right-3 text-center pointer-events-none z-30">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/80 backdrop-blur-xs text-[11px] text-slate-300 border border-white/10 shadow-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      <span>Arahkan barcode atau QR ke tengah kotak panduan</span>
                     </div>
                   </div>
                 )}

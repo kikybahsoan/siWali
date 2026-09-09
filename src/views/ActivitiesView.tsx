@@ -1,5 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ActivityLog, ActivityType, ActivityCategory, RombelType, SchoolProfile } from '../types';
+import {
+  ActivityLog,
+  ActivityType,
+  ActivityCategory,
+  RombelType,
+  SchoolProfile,
+  PROFIL_LULUSAN_DIMENSIONS,
+} from '../types';
 import { DriveImage } from '../components/DriveImage';
 import { extractDriveFileId, DRIVE_GUIDE_STEPS } from '../utils/imageHelper';
 import { formatIndonesianDate } from '../utils/formatters';
@@ -83,6 +90,7 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
   const [activeTab, setActiveTab] = useState<'ALL' | ActivityType>('ALL');
   const [selectedRombel, setSelectedRombel] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedDimension, setSelectedDimension] = useState<string>('ALL');
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   // Form State
@@ -133,37 +141,44 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
     let defaultDesc = '';
     let defaultOutcome = 'Kegiatan terlaksana dengan baik, murid hadir tertib dan aktif.';
     let defaultPhoto = '';
+    let defaultProfil: string[] = [];
 
     if (categoryName === 'Religi & Sholat Dhuha') {
       defaultTitle = "Sholat Dhuha Berjamaah & Tadarus Al-Qur'an";
       defaultTime = '06:50 - 07:25';
       defaultDesc = 'Pembiasaan sholat dhuha berjamaah dan tadarus surah pendek di musholla sekolah.';
       defaultPhoto = 'https://images.unsplash.com/photo-1591604466107-ec97de577aff?auto=format&fit=crop&w=400&q=80';
+      defaultProfil = ['Keimanan dan Ketakwaan'];
     } else if (categoryName === 'Literasi Pagi') {
       defaultTitle = 'Literasi Pagi: Membaca & Bedah Karya Desain DKV';
       defaultTime = '07:15 - 07:45';
       defaultDesc = 'Kegiatan 15 menit membaca buku referensi desain visual dan apresiasi karya poster.';
       defaultPhoto = 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80';
+      defaultProfil = ['Penalaran Kritis', 'Komunikasi', 'Kemandirian'];
     } else if (categoryName === 'Kebersihan & Lingkungan') {
       defaultTitle = 'Piket Kebersihan Kelas & Penataan Studio Komputer DKV';
       defaultTime = '15:20 - 15:45';
       defaultDesc = 'Pembersihan meja kerja komputer, penataan kabel, dan penyapuan lantai ruang kelas.';
       defaultPhoto = 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=400&q=80';
+      defaultProfil = ['Kewargaan', 'Kolaborasi', 'Kesehatan'];
     } else if (categoryName === 'Senam & Olahraga') {
       defaultTitle = 'Senam Pagi Kebugaran & Peregangan Ergonomis Komputer';
       defaultTime = '06:45 - 07:15';
       defaultDesc = 'Senam bersama di lapangan sekolah dan peregangan postur ergonomis bagi siswa DKV.';
       defaultPhoto = 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=400&q=80';
+      defaultProfil = ['Kesehatan', 'Kolaborasi'];
     } else if (categoryName === 'Upacara & Apel') {
       defaultTitle = 'Upacara Bendera Hari Senin & Apel Pembinaan Disiplin';
       defaultTime = '07:00 - 08:00';
       defaultDesc = 'Upacara bendera penaikan Sang Merah Putih dan pembinaan kedisiplinan serta kerapihan.';
       defaultPhoto = 'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=400&q=80';
+      defaultProfil = ['Kewargaan', 'Keimanan dan Ketakwaan', 'Kemandirian'];
     } else if (categoryName === 'Parenting / Temu Wali Murid') {
       defaultTitle = 'Pertemuan Paguyuban Orang Tua / Parenting Murid DKV';
       defaultTime = '09:00 - 11:30';
       defaultDesc = 'Sosialisasi perkembangan belajar, portofolio karya, dan sinergi bimbingan dengan orang tua.';
       defaultPhoto = 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=400&q=80';
+      defaultProfil = ['Komunikasi', 'Kolaborasi'];
     }
 
     const newAct: ActivityLog = {
@@ -181,6 +196,7 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
       location: 'SMK Negeri 2 Gorontalo',
       description: defaultDesc,
       outcome: defaultOutcome,
+      profilLulusan: defaultProfil,
       photoUrl: defaultPhoto,
       leaderOrPic: profile.homeroomTeacherName,
       createdAt: new Date().toISOString(),
@@ -215,6 +231,7 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
       location: 'SMK Negeri 2 Gorontalo',
       description: '',
       outcome: '',
+      profilLulusan: ['Keimanan dan Ketakwaan'],
       photoUrl: '',
       leaderOrPic: profile.homeroomTeacherName,
       createdAt: new Date().toISOString(),
@@ -255,6 +272,12 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
       if (selectedRombel !== 'ALL' && act.rombel !== selectedRombel && act.rombel !== 'Semua Rombel') {
         return false;
       }
+      // Dimensi Profil Lulusan filter
+      if (selectedDimension !== 'ALL') {
+        if (!act.profilLulusan || !act.profilLulusan.includes(selectedDimension)) {
+          return false;
+        }
+      }
       // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -262,11 +285,12 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
         const matchCat = act.category.toLowerCase().includes(q);
         const matchDesc = act.description.toLowerCase().includes(q);
         const matchLoc = (act.location || '').toLowerCase().includes(q);
-        return matchTitle || matchCat || matchDesc || matchLoc;
+        const matchDim = (act.profilLulusan || []).some((d) => d.toLowerCase().includes(q));
+        return matchTitle || matchCat || matchDesc || matchLoc || matchDim;
       }
       return true;
     });
-  }, [activities, activeTab, selectedRombel, searchQuery]);
+  }, [activities, activeTab, selectedRombel, selectedDimension, searchQuery]);
 
   // Counts
   const harianCount = activities.filter((a) => a.type === 'Harian').length;
@@ -475,8 +499,8 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
           </button>
         </div>
 
-        {/* Filter Rombel & Search */}
-        <div className="flex items-center gap-2">
+        {/* Filter Rombel, Dimensi Profil, & Search */}
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={selectedRombel}
             onChange={(e) => setSelectedRombel(e.target.value)}
@@ -486,6 +510,20 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
             <option value="10-DKV-1">10-DKV-1</option>
             <option value="10-DKV-3">10-DKV-3</option>
             <option value="11-DKV-3">11-DKV-3</option>
+          </select>
+
+          <select
+            value={selectedDimension}
+            onChange={(e) => setSelectedDimension(e.target.value)}
+            className="p-2 text-xs font-medium rounded-xl border border-slate-300 bg-white text-slate-700 focus:ring-2 focus:ring-blue-600 max-w-[170px] sm:max-w-[210px] truncate"
+            title="Filter berdasarkan 8 Dimensi Profil Lulusan"
+          >
+            <option value="ALL">Semua Dimensi Profil Lulusan</option>
+            {PROFIL_LULUSAN_DIMENSIONS.map((dim) => (
+              <option key={dim.id} value={dim.name}>
+                {dim.name}
+              </option>
+            ))}
           </select>
 
           <div className="relative">
@@ -593,6 +631,29 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
                     <p className="text-xs text-slate-600 mt-2 line-clamp-2 leading-relaxed">
                       {act.description}
                     </p>
+
+                    {act.profilLulusan && act.profilLulusan.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2.5">
+                        {act.profilLulusan.slice(0, 2).map((dim) => (
+                          <span
+                            key={dim}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100 text-[10px] font-semibold text-indigo-700"
+                            title={dim}
+                          >
+                            <Sparkles className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+                            <span className="truncate max-w-[120px]">{dim}</span>
+                          </span>
+                        ))}
+                        {act.profilLulusan.length > 2 && (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-slate-100 text-[10px] font-semibold text-slate-600"
+                            title={act.profilLulusan.slice(2).join(', ')}
+                          >
+                            +{act.profilLulusan.length - 2} Dimensi
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Metadata items */}
@@ -876,6 +937,96 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
                 </div>
               </div>
 
+              {/* DAFTAR 8 DIMENSI PROFIL LULUSAN (UNTUK DIPILIH) */}
+              <div className="p-4 bg-gradient-to-br from-indigo-50/70 via-blue-50/40 to-slate-50 rounded-2xl border border-indigo-200/90 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-indigo-100">
+                  <div>
+                    <label className="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-indigo-600" />
+                      <span>Daftar 8 Dimensi Profil Lulusan</span>
+                      <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-100/90 px-2 py-0.5 rounded-full">
+                        {(editingActivity.profilLulusan || []).length} Terpilih
+                      </span>
+                    </label>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      Pilih dimensi profil lulusan yang dikembangkan dan dibiasakan melalui kegiatan ini:
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingActivity({
+                          ...editingActivity,
+                          profilLulusan: PROFIL_LULUSAN_DIMENSIONS.map((d) => d.name),
+                        });
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 bg-indigo-100/70 hover:bg-indigo-200/80 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Pilih Semua (8)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingActivity({
+                          ...editingActivity,
+                          profilLulusan: [],
+                        });
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {PROFIL_LULUSAN_DIMENSIONS.map((dim) => {
+                    const isSelected = (editingActivity.profilLulusan || []).includes(dim.name);
+                    return (
+                      <button
+                        key={dim.id}
+                        type="button"
+                        onClick={() => {
+                          const currentList = editingActivity.profilLulusan || [];
+                          const updated = isSelected
+                            ? currentList.filter((item) => item !== dim.name)
+                            : [...currentList, dim.name];
+                          setEditingActivity({
+                            ...editingActivity,
+                            profilLulusan: updated,
+                          });
+                        }}
+                        className={`p-3 rounded-xl text-left transition-all border flex items-start gap-2.5 cursor-pointer ${
+                          isSelected
+                            ? 'bg-white border-indigo-500 shadow-xs ring-2 ring-indigo-500/25'
+                            : 'bg-white/80 hover:bg-white border-slate-200/90 hover:border-slate-300'
+                        }`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded mt-0.5 shrink-0 flex items-center justify-center border transition-colors ${
+                            isSelected
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xs'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-xs text-slate-800">
+                            {dim.name}
+                          </p>
+                          <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                            {dim.description}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* FOTO DOKUMENTASI GOOGLE DRIVE (LOW RESOLUTION AUTO OPTIMIZED) */}
               <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200/80 space-y-2">
                 <div className="flex items-center justify-between">
@@ -1071,6 +1222,34 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
                   <p className="text-emerald-900 bg-emerald-50/80 p-3 rounded-lg border border-emerald-200 leading-relaxed">
                     {viewingActivity.outcome}
                   </p>
+                </div>
+              )}
+
+              {viewingActivity.profilLulusan && viewingActivity.profilLulusan.length > 0 && (
+                <div>
+                  <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Dimensi Profil Lulusan yang Dikembangkan ({viewingActivity.profilLulusan.length}):</span>
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
+                    {viewingActivity.profilLulusan.map((dimName) => {
+                      const dimInfo = PROFIL_LULUSAN_DIMENSIONS.find((d) => d.name === dimName);
+                      return (
+                        <div
+                          key={dimName}
+                          className="bg-white p-2.5 rounded-lg border border-indigo-100 shadow-2xs flex items-start gap-2"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <p className="font-bold text-xs text-slate-800">{dimName}</p>
+                            <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                              {dimInfo?.description || 'Dimensi profil lulusan'}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

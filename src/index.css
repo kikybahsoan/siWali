@@ -91,3 +91,79 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* QR & Barcode Scanner Viewport Styling */
+#qr-code-scanner-reader {
+  width: 100% !important;
+  min-height: 300px !important;
+  border: none !important;
+  background: transparent !important;
+  position: relative !important;
+}
+
+#qr-code-scanner-reader video {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 280px !important;
+  max-height: 480px !important;
+  object-fit: cover !important;
+  border-radius: 1rem !important;
+  display: block !important;
+  margin: 0 auto !important;
+  background-color: #020617 !important;
+}
+
+/* Prevent internal debug or processing canvas from covering live video feed */
+#qr-code-scanner-reader canvas:not([style*="display: none"]) {
+  position: absolute !important;
+  pointer-events: none !important;
+  opacity: 0.8 !important;
+}
+
+#qr-code-scanner-reader img[alt="Info icon"] {
+  display: none !important;
+}
+
+#qr-code-scanner-reader__scan_region {
+  min-height: 280px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+#qr-code-scanner-reader__scan_region video {
+  border-radius: 1rem !important;
+}
+
+#qr-shaded-region {
+  border-radius: 1rem !important;
+}
+
+/* Moving Laser Scanning Beam */
+@keyframes scanner-laser-sweep {
+  0% {
+    top: 10%;
+    opacity: 0.8;
+  }
+  50% {
+    top: 90%;
+    opacity: 1;
+  }
+  100% {
+    top: 10%;
+    opacity: 0.8;
+  }
+}
+
+.scanner-laser-beam {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  height: 2.5px;
+  background: linear-gradient(90deg, transparent, #10b981 15%, #34d399 50%, #10b981 85%, transparent);
+  box-shadow: 0 0 14px 3px rgba(52, 211, 153, 0.85);
+  animation: scanner-laser-sweep 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+  z-index: 25;
+}
+

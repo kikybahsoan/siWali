@@ -237,6 +237,55 @@ export type ActivityCategory =
   | 'Bakti Sosial & Aksi Nyata'
   | 'Lainnya';
 
+export interface ProfilLulusanDimension {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export const PROFIL_LULUSAN_DIMENSIONS: ProfilLulusanDimension[] = [
+  {
+    id: 'keimanan_ketakwaan',
+    name: 'Keimanan dan Ketakwaan',
+    description: 'Berakhlak mulia dan taat kepada Tuhan Yang Maha Esa.',
+  },
+  {
+    id: 'kewargaan',
+    name: 'Kewargaan',
+    description: 'Memiliki kesadaran rasa cinta tanah air dan tanggung jawab sosial.',
+  },
+  {
+    id: 'penalaran_kritis',
+    name: 'Penalaran Kritis',
+    description: 'Mampu memecahkan masalah secara logis dan analitis.',
+  },
+  {
+    id: 'kreativitas',
+    name: 'Kreativitas',
+    description: 'Mampu menghasilkan gagasan atau karya yang baru dan orisinal.',
+  },
+  {
+    id: 'kolaborasi',
+    name: 'Kolaborasi',
+    description: 'Mampu bekerja sama secara efektif dalam kelompok.',
+  },
+  {
+    id: 'kemandirian',
+    name: 'Kemandirian',
+    description: 'Mampu mengatur diri dan bertanggung jawab atas proses belajarnya.',
+  },
+  {
+    id: 'kesehatan',
+    name: 'Kesehatan',
+    description: 'Memiliki kesejahteraan jasmani dan rohani yang bugar.',
+  },
+  {
+    id: 'komunikasi',
+    name: 'Komunikasi',
+    description: 'Mampu menyampaikan pesan secara jelas dan santun.',
+  },
+];
+
 export interface ActivityLog {
   id: string;
   title: string;
@@ -252,6 +301,7 @@ export interface ActivityLog {
   location?: string;
   description: string;
   outcome?: string; // Hasil kegiatan / catatan evaluasi
+  profilLulusan?: string[]; // Daftar 8 Dimensi Profil Lulusan yang dipilih
   photoUrl?: string; // Foto Google Drive / URL resolusi rendah
   documentationPhotos?: string[];
   leaderOrPic?: string; // Guru Pembina / Penanggung Jawab
