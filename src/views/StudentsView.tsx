@@ -26,11 +26,14 @@ import {
   Image as ImageIcon,
   HelpCircle,
   User,
+  QrCode,
 } from 'lucide-react';
 import { formatIndonesianDate } from '../utils/formatters';
 import { DriveImage } from '../components/DriveImage';
 import { DRIVE_GUIDE_STEPS } from '../utils/imageHelper';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
+import { StudentBarcodeCard } from '../components/StudentBarcodeCard';
+import { BatchBarcodeCardsModal } from '../components/BatchBarcodeCardsModal';
 
 interface StudentsViewProps {
   students: Student[];
@@ -63,6 +66,8 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
   const [activeFormTab, setActiveFormTab] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [showDriveGuide, setShowDriveGuide] = useState<boolean>(false);
+  const [isBatchBarcodeModalOpen, setIsBatchBarcodeModalOpen] = useState<boolean>(false);
+  const [selectedStudentForBarcode, setSelectedStudentForBarcode] = useState<Student | null>(null);
 
   React.useEffect(() => {
     if (isOpenNewDirectly) {
@@ -280,15 +285,26 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             </p>
           </div>
 
-          <button
-            id="add-student-btn"
-            onClick={isAdmin ? handleOpenCreateNew : (onRequireAdmin || handleOpenCreateNew)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold shadow-sm transition-all active:scale-95 self-stretch sm:self-auto justify-center"
-            title={isAdmin ? 'Tambah data murid baru' : 'Masuk Admin untuk tambah murid'}
-          >
-            <Plus className="w-4 h-4" />
-            + Tambah Murid
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
+            <button
+              onClick={() => setIsBatchBarcodeModalOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all flex-1 sm:flex-initial justify-center"
+              title="Cetak kartu barcode presensi untuk seluruh murid binaan"
+            >
+              <QrCode className="w-4 h-4 text-emerald-200" />
+              <span>Cetak Kartu Barcode</span>
+            </button>
+
+            <button
+              id="add-student-btn"
+              onClick={isAdmin ? handleOpenCreateNew : (onRequireAdmin || handleOpenCreateNew)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold shadow-sm transition-all active:scale-95 flex-1 sm:flex-initial justify-center"
+              title={isAdmin ? 'Tambah data murid baru' : 'Masuk Admin untuk tambah murid'}
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Tambah Murid</span>
+            </button>
+          </div>
         </div>
 
         {/* Search and Rombel Tabs */}
@@ -429,7 +445,17 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                 title="Cetak Formulir Identitas Murid Wali (Format Resmi)"
               >
                 <Printer className="w-3.5 h-3.5 text-blue-700" />
-                Cetak Form
+                <span>Form</span>
+              </button>
+
+              <button
+                id={`btn-barcode-${st.id}`}
+                onClick={() => setSelectedStudentForBarcode(st)}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-colors"
+                title="Lihat & Cetak Kartu Barcode Siswa untuk Presensi"
+              >
+                <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Barcode</span>
               </button>
 
               {isAdmin && (
@@ -537,6 +563,33 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                   <p className="text-[11px] text-slate-500">
                     {selectedStudentForDetail.birthPlace}, {selectedStudentForDetail.birthDate}
                   </p>
+                </div>
+              </div>
+
+              {/* Kartu Barcode Murid untuk Presensi */}
+              <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-200">
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-emerald-200">
+                  <h4 className="font-bold text-sm text-emerald-950 flex items-center gap-2">
+                    <QrCode className="w-4 h-4 text-emerald-700" />
+                    <span>Kartu Barcode Presensi Murid</span>
+                  </h4>
+                  <button
+                    onClick={() => {
+                      const st = selectedStudentForDetail;
+                      setSelectedStudentForBarcode(st);
+                    }}
+                    className="px-3 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1 shadow-2xs"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Cetak Kartu Siswa</span>
+                  </button>
+                </div>
+                <div className="flex justify-center py-2">
+                  <StudentBarcodeCard
+                    student={selectedStudentForDetail}
+                    profile={profile}
+                    onPrint={() => window.print()}
+                  />
                 </div>
               </div>
 
@@ -1703,6 +1756,51 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
           </div>
         </div>
       )}
+      {/* BATCH BARCODE CARDS MODAL FOR ALL STUDENTS */}
+      <BatchBarcodeCardsModal
+        isOpen={isBatchBarcodeModalOpen}
+        onClose={() => setIsBatchBarcodeModalOpen(false)}
+        students={students}
+        profile={profile}
+      />
+
+      {/* SINGLE STUDENT BARCODE CARD MODAL */}
+      {selectedStudentForBarcode && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <QrCode className="w-4 h-4 text-emerald-600" />
+                <span>Kartu Barcode Presensi Murid</span>
+              </h3>
+              <button
+                onClick={() => setSelectedStudentForBarcode(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex justify-center">
+              <StudentBarcodeCard
+                student={selectedStudentForBarcode}
+                profile={profile}
+                onPrint={() => window.print()}
+              />
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+              <button
+                onClick={() => setSelectedStudentForBarcode(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* CONFIRM DELETE MODAL */}
       <ConfirmDeleteModal
         isOpen={!!studentToDelete}

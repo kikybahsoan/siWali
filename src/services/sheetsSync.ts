@@ -1,4 +1,4 @@
-import { GoogleSheetsConfig, FullSyncPayload, Student, Consultation, Collaboration, StudentCase, SchoolProfile } from '../types';
+import { GoogleSheetsConfig, FullSyncPayload, Student, Consultation, Collaboration, StudentCase, SchoolProfile, AttendanceRecord } from '../types';
 import { StorageService } from './storage';
 
 const SHEETS_CONFIG_KEY = 'siwali_sheets_sync_config_v1';
@@ -225,7 +225,42 @@ function saveAllDataToSheets(payload) {
     }
   }
 
-  // 3. KONSULTASI PERWALIAN
+  // 3. KEHADIRAN MURID (PRESENSI BARCODE & REKAP)
+  if (payload.attendances && Array.isArray(payload.attendances)) {
+    var headersKehadiran = [
+      'ID', 'Tanggal', 'Hari', 'Waktu Masuk', 'NISN', 'Nama Lengkap Murid', 'Rombel', 'Status Kehadiran', 'Sesi', 'Metode Presensi', 'Keterangan / Catatan', 'Data JSON Lengkap', 'Tgl Update'
+    ];
+    var sheetHadir = getOrCreateSheet('KEHADIRAN_MURID', headersKehadiran);
+    sheetHadir.clearContents();
+    sheetHadir.appendRow(headersKehadiran);
+    sheetHadir.getRange(1, 1, 1, headersKehadiran.length).setBackground('#047857').setFontColor('#FFFFFF').setFontWeight('bold');
+    sheetHadir.setFrozenRows(1);
+
+    var rowsHadir = [];
+    for (var h = 0; h < payload.attendances.length; h++) {
+      var att = payload.attendances[h];
+      rowsHadir.push([
+        att.id || '',
+        att.date || '',
+        att.dayName || '',
+        att.time || '',
+        att.nisn || '',
+        att.studentName || '',
+        att.rombel || '',
+        att.status || 'Hadir',
+        att.session || 'Pembiasaan Pagi / KBM',
+        att.method || 'Barcode / QR Scan',
+        att.notes || '',
+        JSON.stringify(att),
+        att.updatedAt || att.createdAt || new Date().toISOString()
+      ]);
+    }
+    if (rowsHadir.length > 0) {
+      sheetHadir.getRange(2, 1, rowsHadir.length, rowsHadir[0].length).setValues(rowsHadir);
+    }
+  }
+
+  // 4. KONSULTASI PERWALIAN
   if (payload.consultations && Array.isArray(payload.consultations)) {
     var sheetKonsul = getOrCreateSheet('KONSULTASI_PERWALIAN', [
       'ID', 'Tanggal', 'Hari', 'Nama Murid', 'Rombel', 'Permasalahan', 'Arahan Guru Wali', 'Status Tindak Lanjut', 'Data JSON Lengkap', 'Waktu Dibuat'
@@ -376,6 +411,7 @@ function getAllDataFromSheets() {
   var result = {
     students: [],
     activities: [],
+    attendances: [],
     consultations: [],
     collaborations: [],
     cases: [],
@@ -449,7 +485,46 @@ function getAllDataFromSheets() {
     }
   }
 
-  // 3. KONSULTASI
+  // 3. KEHADIRAN MURID
+  var sheetHadir = ss.getSheetByName('KEHADIRAN_MURID');
+  if (sheetHadir && sheetHadir.getLastRow() > 1) {
+    var valuesHadir = sheetHadir.getRange(2, 1, sheetHadir.getLastRow() - 1, sheetHadir.getLastColumn()).getValues();
+    for (var h = 0; h < valuesHadir.length; h++) {
+      var rowH = valuesHadir[h];
+      var parsedH = null;
+      for (var colH = rowH.length - 1; colH >= 0; colH--) {
+        var cellH = rowH[colH];
+        if (cellH && typeof cellH === 'string' && cellH.indexOf('{') === 0 && (cellH.indexOf('"studentId"') !== -1 || cellH.indexOf('"nisn"') !== -1)) {
+          try {
+            parsedH = JSON.parse(cellH);
+            break;
+          } catch(e) {}
+        }
+      }
+      if (!parsedH && rowH[0]) {
+        parsedH = {
+          id: String(rowH[0] || ('att-' + (h + 1))),
+          date: String(rowH[1] || ''),
+          dayName: String(rowH[2] || ''),
+          time: String(rowH[3] || ''),
+          nisn: String(rowH[4] || ''),
+          studentName: String(rowH[5] || ''),
+          rombel: String(rowH[6] || '10-DKV-1'),
+          status: String(rowH[7] || 'Hadir'),
+          session: String(rowH[8] || 'Pembiasaan Pagi / KBM'),
+          method: String(rowH[9] || 'Barcode / QR Scan'),
+          notes: String(rowH[10] || ''),
+          createdAt: String(rowH[12] || new Date().toISOString()),
+          updatedAt: String(rowH[12] || new Date().toISOString())
+        };
+      }
+      if (parsedH) {
+        result.attendances.push(parsedH);
+      }
+    }
+  }
+
+  // 4. KONSULTASI
   var sheetKonsul = ss.getSheetByName('KONSULTASI_PERWALIAN');
   if (sheetKonsul && sheetKonsul.getLastRow() > 1) {
     var valuesKonsul = sheetKonsul.getRange(2, 1, sheetKonsul.getLastRow() - 1, sheetKonsul.getLastColumn()).getValues();
@@ -649,6 +724,7 @@ export const SheetsSyncService = {
         if (
           (remoteData.students && remoteData.students.length > 0) ||
           (remoteData.activities && remoteData.activities.length > 0) ||
+          (remoteData.attendances && remoteData.attendances.length > 0) ||
           (remoteData.consultations && remoteData.consultations.length > 0) ||
           (remoteData.collaborations && remoteData.collaborations.length > 0) ||
           (remoteData.cases && remoteData.cases.length > 0) ||
@@ -697,6 +773,7 @@ export const SheetsSyncService = {
     const payload: FullSyncPayload = customPayload || {
       students: StorageService.getStudents(),
       activities: StorageService.getActivities(),
+      attendances: StorageService.getAttendances(),
       consultations: StorageService.getConsultations(),
       collaborations: StorageService.getCollaborations(),
       cases: StorageService.getCases(),
@@ -751,6 +828,22 @@ export const SheetsSyncService = {
         message: `Gagal mengirim data ke Google Sheets: ${err.message || 'CORS / Jaringan'}.`,
       };
     }
+  },
+
+  // Real-time synchronization for scanned attendance
+  syncAttendanceRecord: async (
+    record: AttendanceRecord
+  ): Promise<{ success: boolean; message: string }> => {
+    // If Google Sheets is configured, trigger pushToSheets automatically
+    if (SheetsSyncService.isConfigured()) {
+      try {
+        const res = await SheetsSyncService.pushToSheets();
+        return res;
+      } catch (e: any) {
+        return { success: false, message: `Gagal sinkron ke Sheets: ${e.message}` };
+      }
+    }
+    return { success: true, message: 'Data tersimpan di penyimpanan lokal.' };
   },
 
   // Test connection to Google Apps Script Web App

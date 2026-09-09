@@ -259,6 +259,31 @@ export interface ActivityLog {
   updatedAt: string;
 }
 
+export type AttendanceStatus = 'Hadir' | 'Sakit' | 'Izin' | 'Alpa' | 'Terlambat';
+
+export type AttendanceMethod = 'Barcode / QR Scan' | 'Manual' | 'Auto Generate';
+
+export type AttendanceSession = 'Pembiasaan Pagi / KBM' | 'Sholat Dhuha' | 'Literasi DKV' | 'Senam Pagi' | 'KBM Siang' | 'Kegiatan Khusus';
+
+export interface AttendanceRecord {
+  id: string;
+  studentId: string;
+  studentName: string;
+  nisn: string;
+  rombel: RombelType;
+  date: string; // YYYY-MM-DD
+  dayName: string; // Senin, Selasa, dll.
+  time: string; // HH:mm:ss
+  session: AttendanceSession | string;
+  status: AttendanceStatus;
+  method: AttendanceMethod;
+  notes?: string;
+  photoUrl?: string;
+  scannedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GoogleSheetsConfig {
   webAppUrl: string;
   spreadsheetUrl?: string;
@@ -270,9 +295,11 @@ export interface GoogleSheetsConfig {
 export interface FullSyncPayload {
   students: Student[];
   activities?: ActivityLog[];
+  attendances?: AttendanceRecord[];
   consultations: Consultation[];
   collaborations: Collaboration[];
   cases: StudentCase[];
   profile: SchoolProfile;
   lastUpdated?: string;
 }
+

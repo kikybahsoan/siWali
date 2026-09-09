@@ -7,11 +7,15 @@ import {
   GitFork,
   BookOpen,
   CalendarCheck,
+  QrCode,
+  ClipboardCheck,
 } from 'lucide-react';
 
 export type TabType =
   | 'dashboard'
   | 'students'
+  | 'scanner'
+  | 'attendance'
   | 'activities'
   | 'consultations'
   | 'collaborations'
@@ -40,6 +44,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       icon: LayoutDashboard,
     },
     {
+      id: 'scanner' as TabType,
+      label: 'Scan Presensi',
+      icon: QrCode,
+    },
+    {
+      id: 'attendance' as TabType,
+      label: 'Rekap Hadir',
+      icon: ClipboardCheck,
+    },
+    {
       id: 'students' as TabType,
       label: 'Murid Wali',
       icon: Users,
@@ -64,7 +78,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     },
     {
       id: 'journal' as TabType,
-      label: 'Jurnal Rekap',
+      label: 'Jurnal',
       icon: BookOpen,
     },
   ];

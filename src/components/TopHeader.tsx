@@ -1,6 +1,7 @@
 import React from 'react';
 import { SchoolProfile } from '../types';
 import { TabType } from './BottomNav';
+import { AppLogo } from './AppLogo';
 import { ShieldAlert, Printer, Settings, Plus, RotateCcw, FileSpreadsheet, Lock, LogOut, KeyRound, Eye } from 'lucide-react';
 
 interface TopHeaderProps {
@@ -38,6 +39,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     switch (activeTab) {
       case 'dashboard':
         return `Ringkasan Perwalian — ${profile.semester} ${profile.schoolYear}`;
+      case 'scanner':
+        return 'Scan Barcode & QR Presensi Murid';
+      case 'attendance':
+        return 'Buku Rekapitulasi Presensi & Kehadiran Murid';
       case 'students':
         return 'Identitas & Profil 14 Murid Wali';
       case 'activities':
@@ -59,8 +64,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     switch (activeTab) {
       case 'dashboard':
         return `SMK Negeri 2 Gorontalo • Program Keahlian ${profile.expertiseProgram}`;
+      case 'scanner':
+        return 'Pemindai Kartu Barcode Siswa Real-time & Sinkronisasi Otomatis Google Sheets';
+      case 'attendance':
+        return 'Monitoring Harian, Matriks Bulanan Resmi & Cetak Rekapitulasi';
       case 'students':
-        return 'Formulir 4 Bagian (Data Ortu, Akademik, Karakter & Bimbingan Awal)';
+        return 'Formulir 4 Bagian (Data Ortu, Akademik, Karakter, Bimbingan & Barcode Murid)';
       case 'activities':
         return 'Dokumentasi Sholat Dhuha, Literasi, Kebersihan, Senam & Integrasi Foto Drive';
       case 'consultations':
@@ -85,9 +94,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       <div className="flex items-center gap-3 min-w-0">
         {/* Mobile Brand indicator (visible when sidebar is hidden) */}
         <div className="lg:hidden flex items-center gap-2 pr-2 border-r border-slate-200">
-          <div className="w-8 h-8 rounded-lg bg-[#1E3A8A] flex items-center justify-center text-white font-bold text-xs shadow-sm">
-            W
-          </div>
+          <AppLogo size="sm" />
         </div>
 
         <div className="min-w-0">

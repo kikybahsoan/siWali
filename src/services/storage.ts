@@ -1,4 +1,4 @@
-import { Student, Consultation, Collaboration, StudentCase, SchoolProfile, ActivityLog } from '../types';
+import { Student, Consultation, Collaboration, StudentCase, SchoolProfile, ActivityLog, AttendanceRecord } from '../types';
 import {
   INITIAL_STUDENTS,
   INITIAL_ACTIVITIES,
@@ -7,15 +7,78 @@ import {
   INITIAL_CASES,
   INITIAL_SCHOOL_PROFILE,
 } from '../data/seedData';
+import { getIndonesianDayName, getTodayDateString } from '../utils/formatters';
 
 const KEYS = {
   STUDENTS: 'siwali_students_v2',
   ACTIVITIES: 'siwali_activities_v2',
+  ATTENDANCES: 'siwali_attendances_v2',
   CONSULTATIONS: 'siwali_consultations_v2',
   COLLABORATIONS: 'siwali_collaborations_v2',
   CASES: 'siwali_cases_v2',
   PROFILE: 'siwali_school_profile_v1',
 };
+
+// Generate realistic initial attendance records for the last 5 days
+function generateSeedAttendances(studentsList: Student[]): AttendanceRecord[] {
+  const records: AttendanceRecord[] = [];
+  const today = new Date();
+  
+  // Create records for the last 5 days (excluding Sunday)
+  for (let offset = 4; offset >= 0; offset--) {
+    const targetDate = new Date();
+    targetDate.setDate(today.getDate() - offset);
+    if (targetDate.getDay() === 0) continue; // Skip Sunday
+
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const day = String(targetDate.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    const dayName = getIndonesianDayName(dateStr);
+
+    studentsList.forEach((st, idx) => {
+      // Deterministic variety: student 4 is sakit on 2 days ago, student 9 is izin on 3 days ago
+      let status: AttendanceRecord['status'] = 'Hadir';
+      let notes = 'Presensi Tepat Waktu';
+      let time = `06:${45 + (idx % 14)}:${String((idx * 7) % 60).padStart(2, '0')}`;
+
+      if (offset === 1 && idx === 3) {
+        status = 'Sakit';
+        notes = 'Demam flu, surat dokter terlampir';
+        time = '07:15:00';
+      } else if (offset === 2 && idx === 8) {
+        status = 'Izin';
+        notes = 'Izin acara keluarga';
+        time = '07:05:00';
+      } else if (offset === 0 && idx === 11) {
+        status = 'Terlambat';
+        notes = 'Terlambat 10 menit karena ban kempes';
+        time = '07:10:24';
+      }
+
+      records.push({
+        id: `att-${dateStr}-${st.id}`,
+        studentId: st.id,
+        studentName: st.name,
+        nisn: st.nisn,
+        rombel: st.rombel,
+        date: dateStr,
+        dayName,
+        time,
+        session: 'Pembiasaan Pagi / KBM',
+        status,
+        method: offset === 0 && idx < 5 ? 'Barcode / QR Scan' : 'Manual',
+        notes,
+        photoUrl: st.photoUrl,
+        scannedAt: `${dateStr}T${time}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    });
+  }
+
+  return records;
+}
 
 export const StorageService = {
   // Students
@@ -117,6 +180,71 @@ export const StorageService = {
     const list = StorageService.getActivities();
     const updated = list.filter((a) => a.id !== id);
     StorageService.saveActivities(updated);
+    return updated;
+  },
+
+  // Attendances (Presensi Barcode & Rekap)
+  getAttendances: (): AttendanceRecord[] => {
+    try {
+      const data = localStorage.getItem(KEYS.ATTENDANCES);
+      if (!data) {
+        const students = StorageService.getStudents();
+        const seed = generateSeedAttendances(students);
+        localStorage.setItem(KEYS.ATTENDANCES, JSON.stringify(seed));
+        return seed;
+      }
+      return JSON.parse(data);
+    } catch {
+      return [];
+    }
+  },
+
+  saveAttendances: (attendances: AttendanceRecord[]): void => {
+    try {
+      localStorage.setItem(KEYS.ATTENDANCES, JSON.stringify(attendances));
+    } catch (e) {
+      console.error('Failed to save attendances to localStorage', e);
+    }
+  },
+
+  recordAttendance: (record: AttendanceRecord): { updatedList: AttendanceRecord[]; isNew: boolean; record: AttendanceRecord } => {
+    const list = StorageService.getAttendances();
+    // Check if record for same student and date already exists
+    const idx = list.findIndex(
+      (a) => a.id === record.id || (a.studentId === record.studentId && a.date === record.date && (a.session === record.session || !a.session))
+    );
+
+    let updatedList: AttendanceRecord[];
+    let finalRecord: AttendanceRecord;
+    let isNew = false;
+
+    if (idx >= 0) {
+      finalRecord = {
+        ...list[idx],
+        ...record,
+        updatedAt: new Date().toISOString(),
+      };
+      updatedList = [...list];
+      updatedList[idx] = finalRecord;
+    } else {
+      isNew = true;
+      finalRecord = {
+        ...record,
+        id: record.id || `att-${record.date}-${record.studentId}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      updatedList = [finalRecord, ...list];
+    }
+
+    StorageService.saveAttendances(updatedList);
+    return { updatedList, isNew, record: finalRecord };
+  },
+
+  deleteAttendance: (id: string): AttendanceRecord[] => {
+    const list = StorageService.getAttendances();
+    const updated = list.filter((a) => a.id !== id);
+    StorageService.saveAttendances(updated);
     return updated;
   },
 
@@ -303,6 +431,7 @@ export const StorageService = {
     return {
       students: StorageService.getStudents(),
       activities: StorageService.getActivities(),
+      attendances: StorageService.getAttendances(),
       consultations: StorageService.getConsultations(),
       collaborations: StorageService.getCollaborations(),
       cases: StorageService.getCases(),
@@ -313,6 +442,7 @@ export const StorageService = {
   importAllData: (data: {
     students?: Student[];
     activities?: ActivityLog[];
+    attendances?: AttendanceRecord[];
     consultations?: Consultation[];
     collaborations?: Collaboration[];
     cases?: StudentCase[];
@@ -323,6 +453,9 @@ export const StorageService = {
     }
     if (data.activities && Array.isArray(data.activities) && data.activities.length > 0) {
       StorageService.saveActivities(data.activities);
+    }
+    if (data.attendances && Array.isArray(data.attendances) && data.attendances.length > 0) {
+      StorageService.saveAttendances(data.attendances);
     }
     if (data.consultations && Array.isArray(data.consultations) && data.consultations.length > 0) {
       StorageService.saveConsultations(data.consultations);
@@ -350,16 +483,18 @@ export const StorageService = {
   resetAll: (): void => {
     localStorage.setItem(KEYS.STUDENTS, JSON.stringify(INITIAL_STUDENTS));
     localStorage.setItem(KEYS.ACTIVITIES, JSON.stringify(INITIAL_ACTIVITIES));
+    localStorage.setItem(KEYS.ATTENDANCES, JSON.stringify(generateSeedAttendances(INITIAL_STUDENTS)));
     localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(INITIAL_CONSULTATIONS));
     localStorage.setItem(KEYS.COLLABORATIONS, JSON.stringify(INITIAL_COLLABORATIONS));
     localStorage.setItem(KEYS.CASES, JSON.stringify(INITIAL_CASES));
     localStorage.setItem(KEYS.PROFILE, JSON.stringify(INITIAL_SCHOOL_PROFILE));
   },
 
-  // Clear all data records (Students, Activities, Consultations, Collaborations, Cases)
+  // Clear all data records (Students, Activities, Attendances, Consultations, Collaborations, Cases)
   clearAll: (): void => {
     localStorage.setItem(KEYS.STUDENTS, JSON.stringify([]));
     localStorage.setItem(KEYS.ACTIVITIES, JSON.stringify([]));
+    localStorage.setItem(KEYS.ATTENDANCES, JSON.stringify([]));
     localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify([]));
     localStorage.setItem(KEYS.COLLABORATIONS, JSON.stringify([]));
     localStorage.setItem(KEYS.CASES, JSON.stringify([]));

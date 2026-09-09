@@ -6,6 +6,7 @@ import {
   StudentCase,
   SchoolProfile,
   ActivityLog,
+  AttendanceRecord,
 } from './types';
 import { StorageService } from './services/storage';
 import { SheetsSyncService } from './services/sheetsSync';
@@ -19,6 +20,8 @@ import { ConsultationsView } from './views/ConsultationsView';
 import { CollaborationsView } from './views/CollaborationsView';
 import { CasesView } from './views/CasesView';
 import { JournalView } from './views/JournalView';
+import { AttendanceScannerView } from './views/AttendanceScannerView';
+import { AttendanceRecapView } from './views/AttendanceRecapView';
 import { PrintDocumentModal, PrintDocType } from './components/PrintDocumentModal';
 import { SheetsSyncModal } from './components/SheetsSyncModal';
 import { AdminAuthModal } from './components/AdminAuthModal';
@@ -74,6 +77,7 @@ export function App() {
   const [consultations, setConsultations] = useState<Consultation[]>(StorageService.getConsultations());
   const [collaborations, setCollaborations] = useState<Collaboration[]>(StorageService.getCollaborations());
   const [cases, setCases] = useState<StudentCase[]>(StorageService.getCases());
+  const [attendances, setAttendances] = useState<AttendanceRecord[]>(() => StorageService.getAttendances());
 
   // Deep Navigation & Direct Modal Triggers
   const [selectedCaseIdForView, setSelectedCaseIdForView] = useState<string | null>(null);
@@ -104,7 +108,17 @@ export function App() {
     setConsultations(StorageService.getConsultations());
     setCollaborations(StorageService.getCollaborations());
     setCases(StorageService.getCases());
+    setAttendances(StorageService.getAttendances());
     setIsSheetsConfigured(SheetsSyncService.isConfigured());
+  }, []);
+
+  const handleAttendanceUpdated = useCallback((records: AttendanceRecord[]) => {
+    setAttendances(records);
+    // Background auto sync to Sheets if configured
+    const cfg = SheetsSyncService.getConfig();
+    if (cfg.webAppUrl && cfg.autoSyncEnabled) {
+      SheetsSyncService.pushToSheets().catch(() => {});
+    }
   }, []);
 
   // Trigger background auto-push to Google Sheets if configured
@@ -503,6 +517,7 @@ export function App() {
               collaborations={collaborations}
               cases={cases}
               activities={activities}
+              attendances={attendances}
               profile={profile}
               isAdmin={isAdmin}
               onRequireAdmin={handleRequireAdmin}
@@ -515,6 +530,30 @@ export function App() {
                 setSelectedCaseIdForView(c.id);
                 setActiveTab('cases');
               }}
+            />
+          )}
+
+          {activeTab === 'scanner' && (
+            <AttendanceScannerView
+              students={students}
+              profile={profile}
+              attendances={attendances}
+              onAttendanceUpdated={handleAttendanceUpdated}
+              onNavigateToRecap={() => setActiveTab('attendance')}
+              isAdmin={isAdmin}
+              onRequireAdmin={handleRequireAdmin}
+            />
+          )}
+
+          {activeTab === 'attendance' && (
+            <AttendanceRecapView
+              students={students}
+              profile={profile}
+              attendances={attendances}
+              onAttendanceUpdated={handleAttendanceUpdated}
+              onNavigateToScanner={() => setActiveTab('scanner')}
+              isAdmin={isAdmin}
+              onRequireAdmin={handleRequireAdmin}
             />
           )}
 

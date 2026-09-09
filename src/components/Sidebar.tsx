@@ -1,6 +1,7 @@
 import React from 'react';
 import { TabType } from './BottomNav';
 import { SchoolProfile } from '../types';
+import { AppLogo } from './AppLogo';
 import {
   LayoutDashboard,
   Users,
@@ -9,6 +10,8 @@ import {
   GitFork,
   BookOpen,
   CalendarCheck,
+  QrCode,
+  ClipboardCheck,
   Settings,
   Printer,
   ShieldAlert,
@@ -59,6 +62,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: LayoutDashboard,
     },
     {
+      id: 'scanner' as TabType,
+      code: 'SC',
+      label: 'Scan Barcode Presensi',
+      icon: QrCode,
+    },
+    {
+      id: 'attendance' as TabType,
+      code: 'RK',
+      label: 'Rekap Kehadiran',
+      icon: ClipboardCheck,
+    },
+    {
       id: 'students' as TabType,
       code: 'ID',
       label: 'Identitas Murid',
@@ -105,16 +120,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       className="hidden lg:flex w-64 bg-[#1E3A8A] text-white flex-col h-screen sticky top-0 shrink-0 select-none shadow-xl border-r border-blue-900 z-30"
     >
       {/* Brand Header */}
-      <div className="p-6 border-b border-blue-800 flex items-center justify-between">
-        <div>
+      <div className="p-5 border-b border-blue-800 flex items-center gap-3">
+        <AppLogo size="md" />
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-white">siWali</h1>
-            <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+            <h1 className="text-xl font-bold tracking-tight text-white truncate">siWali</h1>
+            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shrink-0">
               DKV
             </span>
           </div>
-          <p className="text-xs text-blue-300 mt-1 uppercase tracking-widest font-medium">
-            SMK Negeri 2 Gorontalo
+          <p className="text-[11px] text-blue-200 mt-0.5 uppercase tracking-wider font-semibold truncate">
+            SMKN 2 Gorontalo
           </p>
         </div>
       </div>
