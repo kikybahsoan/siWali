@@ -31,6 +31,9 @@ import {
   ChevronRight,
   ShieldCheck,
   Zap,
+  Upload,
+  SwitchCamera,
+  Loader2,
 } from 'lucide-react';
 
 interface AttendanceScannerViewProps {
@@ -105,8 +108,10 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
 }) => {
   // Scanner state
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
+  const [isStartingCamera, setIsStartingCamera] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [availableCameras, setAvailableCameras] = useState<Array<{ id: string; label: string }>>([]);
+  const [currentFacingMode, setCurrentFacingMode] = useState<'environment' | 'user'>('environment');
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [voiceAnnounce, setVoiceAnnounce] = useState<boolean>(true);
@@ -132,6 +137,7 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
   const lastScannedCodeRef = useRef<string>('');
   const lastScanTimeRef = useRef<number>(0);
   const manualInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const todayStr = useMemo(() => getTodayDateString(), []);
 
@@ -285,71 +291,168 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
     }
   };
 
-  // Start Html5Qrcode scanner
-  const startCamera = async () => {
+  // Stop camera safely and release stream
+  const stopCamera = async () => {
+    if (html5QrCodeRef.current) {
+      try {
+        if (html5QrCodeRef.current.isScanning) {
+          await html5QrCodeRef.current.stop();
+        }
+        await html5QrCodeRef.current.clear();
+      } catch (err) {
+        console.warn('Failed to cleanly stop camera', err);
+      }
+    }
+    setIsCameraActive(false);
+  };
+
+  // Start Html5Qrcode scanner with multi-tier fallback (environment -> user -> device)
+  const startCamera = async (overrideTarget?: 'environment' | 'user' | string) => {
     setCameraError(null);
+    setIsStartingCamera(true);
+
+    // 1. Ensure any previous instance or track is cleanly stopped
+    await stopCamera();
+
+    const targetFacing = overrideTarget === 'user' || overrideTarget === 'environment'
+      ? overrideTarget
+      : currentFacingMode;
+
+    const qrConfig = {
+      fps: 15,
+      qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+        const boxSize = Math.max(180, Math.floor(minEdge * 0.72));
+        return { width: boxSize, height: boxSize };
+      },
+      // Note: Omit strict aspectRatio constraint to prevent NotReadableError/OverconstrainedError
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.UPC_A,
+      ],
+    };
+
+    const handleSuccess = (decodedText: string) => {
+      if (!isProcessingRef.current) {
+        isProcessingRef.current = true;
+        processDecodedText(decodedText);
+        setTimeout(() => {
+          isProcessingRef.current = false;
+        }, 1200);
+      }
+    };
+
     try {
       if (!html5QrCodeRef.current) {
-        html5QrCodeRef.current = new Html5Qrcode('qr-code-scanner-reader');
+        html5QrCodeRef.current = new Html5Qrcode('qr-code-scanner-reader', { verbose: false });
       }
 
-      const devices = await Html5Qrcode.getCameras();
-      if (!devices || devices.length === 0) {
-        setCameraError('Kamera tidak terdeteksi pada perangkat ini. Anda dapat menggunakan mode Input Barcode / NISN manual di bawah.');
-        return;
-      }
-
-      setAvailableCameras(devices.map((d) => ({ id: d.id, label: d.label || `Kamera ${d.id}` })));
-      const cameraIdToUse = selectedCameraId || devices[devices.length - 1].id; // Prefer back camera
-      setSelectedCameraId(cameraIdToUse);
-
-      await html5QrCodeRef.current.start(
-        cameraIdToUse,
-        {
-          fps: 15,
-          qrbox: { width: 260, height: 260 },
-          aspectRatio: 1.0,
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.QR_CODE,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.UPC_A,
-          ],
-        },
-        (decodedText) => {
-          if (!isProcessingRef.current) {
-            isProcessingRef.current = true;
-            processDecodedText(decodedText);
-            setTimeout(() => {
-              isProcessingRef.current = false;
-            }, 1000);
-          }
-        },
-        () => {
-          // Ignore parse errors per frame
+      // Try discovering cameras if available, without failing if permission isn't granted yet
+      try {
+        const devs = await Html5Qrcode.getCameras();
+        if (devs && devs.length > 0) {
+          setAvailableCameras(devs.map((d) => ({ id: d.id, label: d.label || `Kamera ${d.id}` })));
         }
-      );
+      } catch (e) {
+        // Enumerate error before permission is safe to ignore
+      }
 
-      setIsCameraActive(true);
+      // Build sequential fallback attempts
+      const attempts: any[] = [];
+      if (typeof overrideTarget === 'string' && overrideTarget !== 'environment' && overrideTarget !== 'user') {
+        attempts.push(overrideTarget);
+        attempts.push({ facingMode: targetFacing });
+        attempts.push({ facingMode: targetFacing === 'environment' ? 'user' : 'environment' });
+      } else {
+        // Default: try target facing mode, then alternative facing mode
+        attempts.push({ facingMode: targetFacing });
+        attempts.push({ facingMode: targetFacing === 'environment' ? 'user' : 'environment' });
+      }
+
+      let started = false;
+      let lastErr: any = null;
+
+      for (const cameraTarget of attempts) {
+        try {
+          await html5QrCodeRef.current.start(
+            cameraTarget,
+            qrConfig,
+            handleSuccess,
+            () => {}
+          );
+          started = true;
+          if (typeof cameraTarget === 'object' && cameraTarget.facingMode) {
+            setCurrentFacingMode(cameraTarget.facingMode);
+          }
+          break;
+        } catch (err: any) {
+          lastErr = err;
+          console.warn('Camera attempt failed for target:', cameraTarget, err);
+        }
+      }
+
+      if (started) {
+        setIsCameraActive(true);
+        setCameraError(null);
+      } else {
+        throw lastErr || new Error('Gagal memulai sumber video kamera');
+      }
     } catch (err: any) {
       console.error('Camera start error:', err);
-      setCameraError(
-        `Izin kamera belum aktif atau diblokir: ${err.message || 'Periksa izin kamera browser'}. Silakan gunakan Input Barcode Manual atau pilih murid langsung.`
-      );
+      const errMsg = String(err?.message || err);
+
+      let friendlyMsg = '';
+      if (errMsg.includes('NotReadableError') || errMsg.includes('Could not start video source')) {
+        friendlyMsg =
+          'Kamera tidak dapat dimulai karena sumber video terkunci (NotReadableError). Hal ini biasa terjadi jika kamera sedang digunakan oleh aplikasi lain (seperti Zoom, Google Meet, Teams, tab browser lain, atau aplikasi kamera bawaan). Tutup aplikasi yang menggunakan kamera, lalu coba lagi.';
+      } else if (errMsg.includes('NotAllowedError') || errMsg.includes('Permission denied')) {
+        friendlyMsg =
+          'Izin akses kamera ditolak oleh browser. Silakan klik ikon gembok / perizinan kamera pada bilah alamat browser Anda untuk mengaktifkan izin.';
+      } else if (errMsg.includes('NotFoundError') || errMsg.includes('DevicesNotFoundError')) {
+        friendlyMsg =
+          'Kamera fisik tidak terdeteksi pada perangkat ini. Anda dapat menggunakan mode Input Barcode Manual atau USB Scanner Gun di bawah.';
+      } else {
+        friendlyMsg = `Kendala akses kamera: ${errMsg}. Silakan gunakan kamera depan atau upload foto barcode di bawah.`;
+      }
+
+      setCameraError(friendlyMsg);
       setIsCameraActive(false);
+    } finally {
+      setIsStartingCamera(false);
     }
   };
 
-  // Stop camera
-  const stopCamera = async () => {
-    if (html5QrCodeRef.current && isCameraActive) {
-      try {
-        await html5QrCodeRef.current.stop();
-        setIsCameraActive(false);
-      } catch (err) {
-        console.error('Failed to stop camera', err);
+  // Switch between front and back camera
+  const switchCamera = async () => {
+    const nextMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+    setCurrentFacingMode(nextMode);
+    await startCamera(nextMode);
+  };
+
+  // Scan directly from uploaded barcode / QR photo or image file
+  const handleFileUploadScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      if (!html5QrCodeRef.current) {
+        html5QrCodeRef.current = new Html5Qrcode('qr-code-scanner-reader', { verbose: false });
       }
+      const decodedText = await html5QrCodeRef.current.scanFile(file, true);
+      if (decodedText) {
+        processDecodedText(decodedText);
+      }
+    } catch (err: any) {
+      if (soundEnabled) playChime(false);
+      setScanNotice({
+        type: 'warning',
+        text: 'Tidak dapat mendeteksi Barcode atau QR dari foto/gambar tersebut. Pastikan barcode terlihat jelas dan tegak.',
+      });
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -528,6 +631,15 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
 
             {/* Camera Viewport */}
             <div className="mt-4">
+              {/* Hidden file input for photo barcode/QR scanning */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileUploadScan}
+                className="hidden"
+              />
+
               <div className="relative bg-slate-950 rounded-2xl overflow-hidden min-h-[320px] sm:min-h-[380px] flex flex-col items-center justify-center border-2 border-dashed border-slate-700">
                 {/* Scanner container for html5-qrcode */}
                 <div
@@ -535,50 +647,121 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
                   className={`w-full max-w-md ${isCameraActive ? 'block' : 'hidden'}`}
                 />
 
-                {!isCameraActive && (
+                {isStartingCamera && (
                   <div className="p-8 text-center flex flex-col items-center justify-center max-w-sm">
+                    <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mb-3" />
+                    <h3 className="text-white font-bold text-sm">Menghubungkan Kamera...</h3>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                      Menginisialisasi sensor video dan modul pemindai barcode.
+                    </p>
+                  </div>
+                )}
+
+                {!isCameraActive && !isStartingCamera && (
+                  <div className="p-6 sm:p-8 text-center flex flex-col items-center justify-center max-w-sm">
                     <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center text-emerald-400 mb-3 shadow-inner">
                       <Camera className="w-8 h-8" />
                     </div>
                     <h3 className="text-white font-bold text-base">Kamera Pemindai Siap</h3>
                     <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      Aktifkan kamera untuk mulai memindai kartu barcode atau QR siswa secara otomatis.
+                      Aktifkan kamera untuk memindai kartu barcode atau QR siswa secara otomatis.
                     </p>
 
+                    <div className="mt-4 flex flex-col sm:flex-row items-center gap-2 w-full justify-center">
+                      <button
+                        onClick={() => startCamera('environment')}
+                        className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span>Nyalakan Kamera Utama</span>
+                      </button>
+
+                      <button
+                        onClick={() => startCamera('user')}
+                        className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors flex items-center justify-center gap-1.5"
+                        title="Gunakan kamera depan atau webcam laptop"
+                      >
+                        <SwitchCamera className="w-3.5 h-3.5" />
+                        <span>Kamera Depan</span>
+                      </button>
+                    </div>
+
                     <button
-                      onClick={startCamera}
-                      className="mt-4 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-lg transition-all flex items-center gap-2 active:scale-95"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="mt-2.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1.5 font-medium underline underline-offset-4"
                     >
-                      <Camera className="w-4 h-4" />
-                      <span>Nyalakan Kamera Scanner</span>
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Atau Upload Foto Barcode / QR</span>
                     </button>
                   </div>
                 )}
 
                 {isCameraActive && (
-                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-auto bg-slate-900/80 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                      <span className="font-semibold text-emerald-300">Kamera Sedang Memindai...</span>
+                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-auto bg-slate-900/85 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-white text-xs gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                      <span className="font-semibold text-emerald-300 truncate">
+                        Kamera Aktif ({currentFacingMode === 'environment' ? 'Belakang' : 'Depan'})
+                      </span>
                     </div>
 
-                    <button
-                      onClick={stopCamera}
-                      className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-semibold transition-colors flex items-center gap-1"
-                    >
-                      <CameraOff className="w-3.5 h-3.5" />
-                      <span>Matikan Kamera</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={switchCamera}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold transition-colors flex items-center gap-1 border border-slate-700"
+                        title="Ganti kamera depan / belakang"
+                      >
+                        <SwitchCamera className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Ganti</span>
+                      </button>
+
+                      <button
+                        onClick={stopCamera}
+                        className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-semibold transition-colors flex items-center gap-1"
+                      >
+                        <CameraOff className="w-3.5 h-3.5" />
+                        <span>Matikan</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
 
               {cameraError && (
-                <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-semibold">Info Akses Kamera:</p>
-                    <p className="mt-0.5">{cameraError}</p>
+                <div className="mt-3 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs shadow-xs space-y-3">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-bold text-amber-950">Info Akses Kamera:</p>
+                      <p className="mt-0.5 text-amber-800 leading-relaxed">{cameraError}</p>
+                    </div>
+                  </div>
+
+                  {/* Quick Action Recovery Buttons */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-200/60">
+                    <button
+                      onClick={() => startCamera('user')}
+                      className="px-3 py-1.5 rounded-lg bg-amber-200/80 hover:bg-amber-300 text-amber-950 text-[11px] font-bold transition-colors flex items-center gap-1.5"
+                    >
+                      <SwitchCamera className="w-3.5 h-3.5" />
+                      <span>Coba Kamera Depan / Laptop</span>
+                    </button>
+
+                    <button
+                      onClick={() => startCamera('environment')}
+                      className="px-3 py-1.5 rounded-lg bg-amber-200/80 hover:bg-amber-300 text-amber-950 text-[11px] font-bold transition-colors flex items-center gap-1.5"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>Coba Kamera Belakang</span>
+                    </button>
+
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-amber-300 text-[11px] font-semibold transition-colors flex items-center gap-1.5"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-blue-700" />
+                      <span>Upload Foto Barcode</span>
+                    </button>
                   </div>
                 </div>
               )}
