@@ -1,4 +1,4 @@
-import { GoogleSheetsConfig, FullSyncPayload, Student, Consultation, Collaboration, StudentCase, SchoolProfile, AttendanceRecord } from '../types';
+import { GoogleSheetsConfig, FullSyncPayload, Student, Consultation, Collaboration, StudentCase, SchoolProfile, AttendanceRecord, ActivityLog } from '../types';
 import { StorageService } from './storage';
 
 const SHEETS_CONFIG_KEY = 'siwali_sheets_sync_config_v1';
@@ -114,7 +114,7 @@ function saveAllDataToSheets(payload) {
       'TK Asal', 'SD Asal', 'SMP Asal',
       'Prestasi SD', 'Prestasi SMP', 'Ekstrakurikuler',
       'Cita-cita Profesi', 'Aspirasi Lanjutan', 'Mapel Dikuasai', 'Mapel Perlu Bimbingan', 'Catatan Perwalian',
-      'Data JSON Lengkap', 'Tgl Update'
+      'Link Pasfoto Murid', 'Data JSON Lengkap', 'Tgl Update'
     ];
     var sheetMurid = getOrCreateSheet('DATA_MURID', headersMurid);
     sheetMurid.clearContents();
@@ -176,6 +176,7 @@ function saveAllDataToSheets(payload) {
         mastered || '',
         struggling || '',
         s.notes || '',
+        s.photoUrl || '',
         JSON.stringify(s),
         s.updatedAt || new Date().toISOString()
       ]);
@@ -188,7 +189,7 @@ function saveAllDataToSheets(payload) {
   // 2. KEGIATAN PEMBIASAAN
   if (payload.activities && Array.isArray(payload.activities)) {
     var headersKegiatan = [
-      'ID', 'Tanggal', 'Hari', 'Waktu', 'Kategori', 'Tipe', 'Judul Kegiatan', 'Rombel', 'Lokasi', 'Partisipan', 'Jumlah Hadir', 'Status', 'Deskripsi Ringkas', 'Catatan Evaluasi / RTL', 'Pembina / PIC', 'Link Foto Dokumentasi', 'Data JSON Lengkap', 'Tgl Update'
+      'ID', 'Tanggal', 'Hari', 'Waktu', 'Kategori', 'Tipe', 'Judul Kegiatan', 'Rombel', 'Lokasi', 'Partisipan', 'Jumlah Hadir', 'Status', 'Deskripsi Ringkas', 'Catatan Evaluasi / RTL', 'Pembina / PIC', 'Daftar 8 Dimensi Profil Lulusan', 'Link Foto Dokumentasi', 'Data JSON Lengkap', 'Tgl Update'
     ];
     var sheetKegiatan = getOrCreateSheet('KEGIATAN_PEMBIASAAN', headersKegiatan);
     sheetKegiatan.clearContents();
@@ -199,6 +200,7 @@ function saveAllDataToSheets(payload) {
     var rowsKegiatan = [];
     for (var a = 0; a < payload.activities.length; a++) {
       var act = payload.activities[a];
+      var profilStr = Array.isArray(act.profilLulusan) ? act.profilLulusan.join(', ') : (act.profilLulusan || '');
       rowsKegiatan.push([
         act.id || '',
         act.date || '',
@@ -215,6 +217,7 @@ function saveAllDataToSheets(payload) {
         act.description || '',
         act.outcome || '',
         act.leaderOrPic || '',
+        profilStr || '',
         act.photoUrl || '',
         JSON.stringify(act),
         act.updatedAt || act.createdAt || new Date().toISOString()
@@ -423,6 +426,16 @@ function getAllDataFromSheets() {
   var sheetMurid = ss.getSheetByName('DATA_MURID');
   if (sheetMurid && sheetMurid.getLastRow() > 1) {
     var valuesMurid = sheetMurid.getRange(2, 1, sheetMurid.getLastRow() - 1, sheetMurid.getLastColumn()).getValues();
+    var headersMurid = sheetMurid.getRange(1, 1, 1, sheetMurid.getLastColumn()).getValues()[0];
+    var photoColIdx = -1;
+    for (var h = 0; h < headersMurid.length; h++) {
+      var hName = String(headersMurid[h]).toLowerCase();
+      if (hName.indexOf('pasfoto') !== -1 || (hName.indexOf('foto') !== -1 && hName.indexOf('murid') !== -1)) {
+        photoColIdx = h;
+        break;
+      }
+    }
+
     for (var i = 0; i < valuesMurid.length; i++) {
       var row = valuesMurid[i];
       var parsed = null;
@@ -435,8 +448,59 @@ function getAllDataFromSheets() {
           } catch(e) {}
         }
       }
+
+      var colPhoto = photoColIdx !== -1 && row[photoColIdx] ? String(row[photoColIdx]).trim() : '';
+
       if (parsed) {
+        // If parsed exists, preserve photoUrl from column if present
+        if (colPhoto && (!parsed.photoUrl || parsed.photoUrl.trim() === '')) {
+          parsed.photoUrl = colPhoto;
+        }
         result.students.push(parsed);
+      } else if (row[0] || row[2]) {
+        // Fallback reconstruction if JSON string is missing or corrupted
+        result.students.push({
+          id: String(row[0] || ('std-' + (i + 1))),
+          no: Number(row[1]) || (i + 1),
+          name: String(row[2] || ''),
+          nickname: String(row[3] || ''),
+          nisn: String(row[4] || ''),
+          rombel: String(row[5] || '10-DKV-1'),
+          gender: String(row[6] || 'L'),
+          birthPlace: String(row[7] || ''),
+          birthDate: String(row[8] || ''),
+          religion: String(row[9] || 'Islam'),
+          address: String(row[10] || ''),
+          statusKelahiran: String(row[11] || ''),
+          phone: String(row[12] || ''),
+          socialMedia: String(row[13] || ''),
+          penyakitKronis: String(row[14] || ''),
+          fatherName: String(row[15] || ''),
+          fatherJob: String(row[16] || ''),
+          fatherEthnicity: String(row[17] || ''),
+          fatherRelation: String(row[18] || ''),
+          motherName: String(row[19] || ''),
+          motherJob: String(row[20] || ''),
+          motherEthnicity: String(row[21] || ''),
+          motherRelation: String(row[22] || ''),
+          parentPhone: String(row[23] || ''),
+          siblingPhone: String(row[24] || ''),
+          neighborPhone: String(row[25] || ''),
+          tkNama: String(row[26] || ''),
+          sdNama: String(row[27] || ''),
+          smpNama: String(row[28] || ''),
+          prestasiSD: String(row[29] || ''),
+          prestasiSMP: String(row[30] || ''),
+          ekstrakurikuler: String(row[31] || ''),
+          careerGoals: row[32] ? [String(row[32])] : [],
+          furtherStudyAspiration: String(row[33] || ''),
+          masteredSubjects: row[34] ? String(row[34]).split(', ') : [],
+          strugglingSubjects: row[35] ? String(row[35]).split(', ') : [],
+          notes: String(row[36] || ''),
+          photoUrl: colPhoto,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
       }
     }
   }
@@ -458,6 +522,11 @@ function getAllDataFromSheets() {
         }
       }
       if (!parsedK && rowK[0]) {
+        var rawProfil = String(rowK[15] || '');
+        var hasDedicatedPhoto = String(rowK[16] || '').startsWith('http');
+        var parsedProfilList = rawProfil ? rawProfil.split(',').map(function(item){ return item.trim(); }).filter(Boolean) : [];
+        var actPhoto = hasDedicatedPhoto ? String(rowK[16]) : (rawProfil.startsWith('http') ? rawProfil : '');
+
         parsedK = {
           id: String(rowK[0] || ('act-' + (a + 1))),
           date: String(rowK[1] || ''),
@@ -474,9 +543,10 @@ function getAllDataFromSheets() {
           description: String(rowK[12] || ''),
           outcome: String(rowK[13] || ''),
           leaderOrPic: String(rowK[14] || ''),
-          photoUrl: String(rowK[15] || ''),
-          createdAt: String(rowK[17] || new Date().toISOString()),
-          updatedAt: String(rowK[17] || new Date().toISOString())
+          profilLulusan: rawProfil.startsWith('http') ? [] : parsedProfilList,
+          photoUrl: actPhoto,
+          createdAt: String(rowK[18] || rowK[17] || new Date().toISOString()),
+          updatedAt: String(rowK[18] || rowK[17] || new Date().toISOString())
         };
       }
       if (parsedK) {
@@ -705,6 +775,37 @@ export const SheetsSyncService = {
       return { success: false, message: 'URL Google Apps Script Web App belum diatur.' };
     }
 
+    // 1. Primary Attempt: Server-side proxy (completely bypasses browser CORS & iframe redirect limitations)
+    try {
+      const proxyUrl = `/api/sheets-sync?action=fetch_all&url=${encodeURIComponent(url.trim())}&t=${Date.now()}`;
+      const proxyRes = await fetch(proxyUrl, {
+        headers: { Accept: 'application/json' },
+      });
+      if (proxyRes.ok) {
+        const proxyJson = await proxyRes.json();
+        if (proxyJson.status === 'success' && proxyJson.data) {
+          const remoteData = proxyJson.data;
+          StorageService.importAllData(remoteData);
+
+          const currentCfg = SheetsSyncService.getConfig();
+          SheetsSyncService.saveConfig({
+            ...currentCfg,
+            lastSyncTime: new Date().toISOString(),
+            spreadsheetUrl: remoteData.spreadsheetUrl || currentCfg.spreadsheetUrl,
+          });
+
+          return {
+            success: true,
+            data: remoteData,
+            message: 'Data berhasil disinkronkan dari Google Spreadsheet.',
+          };
+        }
+      }
+    } catch {
+      // Fallback to direct fetch
+    }
+
+    // 2. Direct browser fetch fallback
     try {
       const response = await fetch(`${url.trim()}?action=fetch_all&t=${Date.now()}`, {
         method: 'GET',
@@ -721,17 +822,7 @@ export const SheetsSyncService = {
       if (result.status === 'success' && result.data) {
         const remoteData = result.data;
         // Import into local storage
-        if (
-          (remoteData.students && remoteData.students.length > 0) ||
-          (remoteData.activities && remoteData.activities.length > 0) ||
-          (remoteData.attendances && remoteData.attendances.length > 0) ||
-          (remoteData.consultations && remoteData.consultations.length > 0) ||
-          (remoteData.collaborations && remoteData.collaborations.length > 0) ||
-          (remoteData.cases && remoteData.cases.length > 0) ||
-          remoteData.profile
-        ) {
-          StorageService.importAllData(remoteData);
-        }
+        StorageService.importAllData(remoteData);
         
         // Update last sync time and spreadsheet URL if available
         const currentCfg = SheetsSyncService.getConfig();
@@ -781,6 +872,35 @@ export const SheetsSyncService = {
       lastUpdated: new Date().toISOString(),
     };
 
+    // 1. Primary Attempt: Server-side proxy (completely bypasses browser CORS & iframe redirect limitations)
+    try {
+      const proxyResponse = await fetch('/api/sheets-sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          webAppUrl: url.trim(),
+          payload,
+        }),
+      });
+
+      if (proxyResponse.ok) {
+        const proxyResult = await proxyResponse.json();
+        if (proxyResult.status === 'success') {
+          const currentCfg = SheetsSyncService.getConfig();
+          SheetsSyncService.saveConfig({
+            ...currentCfg,
+            lastSyncTime: new Date().toISOString(),
+          });
+          return { success: true, message: 'Data berhasil dikirim & disimpan di Google Spreadsheet!' };
+        }
+      }
+    } catch {
+      // Continue to direct browser fetch fallback
+    }
+
+    // 2. Direct browser fetch fallback
     try {
       // Send as POST payload
       const response = await fetch(url.trim(), {
@@ -828,6 +948,50 @@ export const SheetsSyncService = {
         message: `Gagal mengirim data ke Google Sheets: ${err.message || 'CORS / Jaringan'}.`,
       };
     }
+  },
+
+  // Immediate Student Save & Sync to Spreadsheet
+  syncStudentImmediate: async (
+    student: Student
+  ): Promise<{ success: boolean; message: string }> => {
+    StorageService.saveStudent(student);
+    if (!SheetsSyncService.isConfigured()) {
+      return { success: true, message: 'Data siswa & pasfoto tersimpan di penyimpanan lokal.' };
+    }
+    return SheetsSyncService.pushToSheets();
+  },
+
+  // Immediate Student Delete & Sync to Spreadsheet
+  deleteStudentImmediate: async (
+    id: string
+  ): Promise<{ success: boolean; message: string }> => {
+    StorageService.deleteStudent(id);
+    if (!SheetsSyncService.isConfigured()) {
+      return { success: true, message: 'Data siswa telah dihapus dari penyimpanan lokal.' };
+    }
+    return SheetsSyncService.pushToSheets();
+  },
+
+  // Immediate Activity Save & Sync to Spreadsheet
+  syncActivityImmediate: async (
+    activity: ActivityLog
+  ): Promise<{ success: boolean; message: string }> => {
+    StorageService.saveActivity(activity);
+    if (!SheetsSyncService.isConfigured()) {
+      return { success: true, message: 'Data kegiatan tersimpan di penyimpanan lokal.' };
+    }
+    return SheetsSyncService.pushToSheets();
+  },
+
+  // Immediate Activity Delete & Sync to Spreadsheet
+  deleteActivityImmediate: async (
+    id: string
+  ): Promise<{ success: boolean; message: string }> => {
+    StorageService.deleteActivity(id);
+    if (!SheetsSyncService.isConfigured()) {
+      return { success: true, message: 'Kegiatan telah dihapus dari penyimpanan lokal.' };
+    }
+    return SheetsSyncService.pushToSheets();
   },
 
   // Real-time synchronization for scanned attendance

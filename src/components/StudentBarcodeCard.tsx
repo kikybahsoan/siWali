@@ -29,14 +29,14 @@ export const StudentBarcodeCard: React.FC<StudentBarcodeCardProps> = ({
       try {
         JsBarcode(barcodeRef.current, student.nisn, {
           format: 'CODE128',
-          lineColor: '#0F172A',
-          width: compact ? 1.5 : 2,
-          height: compact ? 36 : 48,
+          lineColor: '#000000',
+          width: compact ? 1.8 : 2.2,
+          height: compact ? 42 : 52,
           displayValue: true,
-          fontSize: compact ? 11 : 13,
+          fontSize: compact ? 12 : 14,
           font: 'monospace',
-          textMargin: 3,
-          margin: 0,
+          textMargin: 4,
+          margin: 6,
         });
       } catch (err) {
         console.warn('JsBarcode rendering error:', err);

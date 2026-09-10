@@ -11,6 +11,8 @@ import { getIndonesianDayName, getTodayDateString } from '../utils/formatters';
 
 const KEYS = {
   STUDENTS: 'siwali_students_v2',
+  DELETED_STUDENT_IDS: 'siwali_deleted_student_ids_v1',
+  LAST_LOCAL_EDIT: 'siwali_last_local_edit_time_v1',
   ACTIVITIES: 'siwali_activities_v2',
   ATTENDANCES: 'siwali_attendances_v2',
   CONSULTATIONS: 'siwali_consultations_v2',
@@ -81,6 +83,50 @@ function generateSeedAttendances(studentsList: Student[]): AttendanceRecord[] {
 }
 
 export const StorageService = {
+  // Local Edit Timing to Prevent Sync Race Conditions
+  recordLocalEditTime: (): void => {
+    try {
+      localStorage.setItem(KEYS.LAST_LOCAL_EDIT, String(Date.now()));
+    } catch {}
+  },
+
+  getLastLocalEditTime: (): number => {
+    try {
+      const t = localStorage.getItem(KEYS.LAST_LOCAL_EDIT);
+      return t ? Number(t) : 0;
+    } catch {
+      return 0;
+    }
+  },
+
+  // Deletion Tombstones to Prevent Deleted Students from Being Resurrected by Remote Pull
+  getDeletedStudentIds: (): Record<string, string> => {
+    try {
+      const data = localStorage.getItem(KEYS.DELETED_STUDENT_IDS);
+      return data ? JSON.parse(data) : {};
+    } catch {
+      return {};
+    }
+  },
+
+  recordDeletedStudentId: (id: string): void => {
+    try {
+      const map = StorageService.getDeletedStudentIds();
+      map[id] = new Date().toISOString();
+      localStorage.setItem(KEYS.DELETED_STUDENT_IDS, JSON.stringify(map));
+    } catch {}
+  },
+
+  removeDeletedStudentId: (id: string): void => {
+    try {
+      const map = StorageService.getDeletedStudentIds();
+      if (map[id]) {
+        delete map[id];
+        localStorage.setItem(KEYS.DELETED_STUDENT_IDS, JSON.stringify(map));
+      }
+    } catch {}
+  },
+
   // Students
   getStudents: (): Student[] => {
     try {
@@ -104,20 +150,26 @@ export const StorageService = {
   },
 
   saveStudent: (student: Student): Student[] => {
+    StorageService.removeDeletedStudentId(student.id);
+    StorageService.recordLocalEditTime();
     const list = StorageService.getStudents();
     const idx = list.findIndex((s) => s.id === student.id);
     let updated: Student[];
+    const now = new Date().toISOString();
     if (idx >= 0) {
       updated = [...list];
-      updated[idx] = { ...student, updatedAt: new Date().toISOString() };
+      updated[idx] = {
+        ...student,
+        updatedAt: now,
+      };
     } else {
       updated = [
         ...list,
         {
           ...student,
           no: list.length + 1,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: student.createdAt || now,
+          updatedAt: now,
         },
       ];
     }
@@ -126,10 +178,75 @@ export const StorageService = {
   },
 
   deleteStudent: (id: string): Student[] => {
+    StorageService.recordDeletedStudentId(id);
+    StorageService.recordLocalEditTime();
     const list = StorageService.getStudents();
     const updated = list.filter((s) => s.id !== id);
     StorageService.saveStudents(updated);
     return updated;
+  },
+
+  // Smart Bidirectional Merge for Students (Anti-Data-Loss Protection)
+  mergeStudents: (remoteStudents: Student[]): Student[] => {
+    const localList = StorageService.getStudents();
+    const deletedMap = StorageService.getDeletedStudentIds();
+    const mergedMap = new Map<string, Student>();
+
+    // 1. Initialize map with existing local students
+    for (const st of localList) {
+      if (st && st.id) {
+        mergedMap.set(st.id, st);
+      }
+    }
+
+    // 2. Iterate through remote students
+    for (const r of remoteStudents) {
+      if (!r || !r.id) continue;
+
+      // Check if student was explicitly deleted locally
+      const deletedAt = deletedMap[r.id];
+      if (deletedAt) {
+        const rTime = r.updatedAt ? new Date(r.updatedAt).getTime() : 0;
+        const dTime = new Date(deletedAt).getTime();
+        // If deleted locally after or at the same time as remote update, honor deletion!
+        if (dTime >= rTime) {
+          continue;
+        } else {
+          // Remote was explicitly updated after local deletion, restore student
+          StorageService.removeDeletedStudentId(r.id);
+        }
+      }
+
+      const local = mergedMap.get(r.id);
+      if (!local) {
+        // Student exists on remote but not locally (and not deleted): add to local
+        mergedMap.set(r.id, r);
+      } else {
+        // Both exist: compare update timestamps
+        const localTime = local.updatedAt ? new Date(local.updatedAt).getTime() : 0;
+        const remoteTime = r.updatedAt ? new Date(r.updatedAt).getTime() : 0;
+
+        if (remoteTime > localTime) {
+          // Remote is strictly newer, adopt remote changes
+          // But guard: if remote has blank/missing photoUrl and local has valid photoUrl, keep local photoUrl!
+          mergedMap.set(r.id, {
+            ...r,
+            photoUrl: r.photoUrl || local.photoUrl || '',
+          });
+        } else {
+          // Local is newer or equal: KEEP LOCAL EDITS!
+          // But if local had no photoUrl and remote does have one, adopt remote photoUrl
+          if (!local.photoUrl && r.photoUrl) {
+            mergedMap.set(r.id, { ...local, photoUrl: r.photoUrl });
+          }
+        }
+      }
+    }
+
+    const result = Array.from(mergedMap.values());
+    result.sort((a, b) => (a.no || 0) - (b.no || 0));
+    StorageService.saveStudents(result);
+    return result;
   },
 
   // Activities (Harian, Mingguan, Bulanan)
@@ -449,7 +566,7 @@ export const StorageService = {
     profile?: SchoolProfile;
   }) => {
     if (data.students && Array.isArray(data.students) && data.students.length > 0) {
-      StorageService.saveStudents(data.students);
+      StorageService.mergeStudents(data.students);
     }
     if (data.activities && Array.isArray(data.activities) && data.activities.length > 0) {
       StorageService.saveActivities(data.activities);

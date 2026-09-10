@@ -36,6 +36,9 @@ import {
   Calendar,
   FileSpreadsheet,
   CloudCheck,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 
 export function App() {
@@ -91,6 +94,10 @@ export function App() {
   const [isSheetsModalOpen, setIsSheetsModalOpen] = useState<boolean>(false);
   const [isSheetsConfigured, setIsSheetsConfigured] = useState<boolean>(SheetsSyncService.isConfigured());
   const [isSheetsSyncing, setIsSheetsSyncing] = useState<boolean>(false);
+  const [syncNotice, setSyncNotice] = useState<{
+    type: 'loading' | 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   // Print Preview Modal State
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
@@ -164,6 +171,13 @@ export function App() {
     } catch {}
 
     const doPull = async () => {
+      // Guard: Do not auto-pull if local edits were made within the last 20 seconds
+      // This prevents remote polling from racing or overwriting in-flight saves
+      const lastLocalEdit = StorageService.getLastLocalEditTime();
+      if (Date.now() - lastLocalEdit < 20000) {
+        return;
+      }
+
       const cfg = SheetsSyncService.getConfig();
       if (cfg.webAppUrl && cfg.autoSyncEnabled) {
         setIsSheetsSyncing(true);
@@ -229,24 +243,106 @@ export function App() {
   };
 
   // Student Actions
-  const handleSaveStudent = (st: Student) => {
+  const handleSaveStudent = async (st: Student) => {
     if (!isAdmin) {
       handleRequireAdmin();
       return;
     }
+    // 1. Save locally with timestamp and cancel any deleted tombstone
     StorageService.saveStudent(st);
     reloadData();
-    triggerAutoPush();
+
+    // 2. Synchronize to Google Sheets
+    const cfg = SheetsSyncService.getConfig();
+    if (cfg.webAppUrl && cfg.autoSyncEnabled) {
+      setSyncNotice({
+        type: 'loading',
+        message: `Menyimpan data ${st.name} & link pasfoto ke Google Spreadsheet...`,
+      });
+      setIsSheetsSyncing(true);
+      try {
+        const res = await SheetsSyncService.pushToSheets();
+        if (res.success) {
+          setSyncNotice({
+            type: 'success',
+            message: `Data ${st.name} & link pasfoto tersimpan aman di Google Spreadsheet!`,
+          });
+          setTimeout(() => setSyncNotice(null), 4000);
+        } else {
+          setSyncNotice({
+            type: 'error',
+            message: `Tersimpan di perangkat lokal. Spreadsheet: ${res.message}`,
+          });
+          setTimeout(() => setSyncNotice(null), 6000);
+        }
+      } catch (err: any) {
+        setSyncNotice({
+          type: 'error',
+          message: `Tersimpan di perangkat lokal. Gagal sinkron ke Spreadsheet: ${err.message}`,
+        });
+        setTimeout(() => setSyncNotice(null), 6000);
+      } finally {
+        setIsSheetsSyncing(false);
+      }
+    } else {
+      setSyncNotice({
+        type: 'success',
+        message: `Data ${st.name} berhasil tersimpan di penyimpanan lokal!`,
+      });
+      setTimeout(() => setSyncNotice(null), 3000);
+    }
   };
 
-  const handleDeleteStudent = (id: string) => {
+  const handleDeleteStudent = async (id: string) => {
     if (!isAdmin) {
       handleRequireAdmin();
       return;
     }
+    const studentToDelete = students.find((s) => s.id === id);
+    const studentName = studentToDelete ? studentToDelete.name : 'Siswa';
+    // 1. Delete locally and record deletion tombstone
     StorageService.deleteStudent(id);
     reloadData();
-    triggerAutoPush();
+
+    // 2. Synchronize deletion to Google Sheets
+    const cfg = SheetsSyncService.getConfig();
+    if (cfg.webAppUrl && cfg.autoSyncEnabled) {
+      setSyncNotice({
+        type: 'loading',
+        message: `Menghapus data ${studentName} dari Google Spreadsheet...`,
+      });
+      setIsSheetsSyncing(true);
+      try {
+        const res = await SheetsSyncService.pushToSheets();
+        if (res.success) {
+          setSyncNotice({
+            type: 'success',
+            message: `${studentName} berhasil dihapus dari Google Spreadsheet & perangkat!`,
+          });
+          setTimeout(() => setSyncNotice(null), 4000);
+        } else {
+          setSyncNotice({
+            type: 'error',
+            message: `Dihapus secara lokal. Spreadsheet: ${res.message}`,
+          });
+          setTimeout(() => setSyncNotice(null), 6000);
+        }
+      } catch (err: any) {
+        setSyncNotice({
+          type: 'error',
+          message: `Dihapus secara lokal. Gagal sinkron: ${err.message}`,
+        });
+        setTimeout(() => setSyncNotice(null), 6000);
+      } finally {
+        setIsSheetsSyncing(false);
+      }
+    } else {
+      setSyncNotice({
+        type: 'success',
+        message: `Data ${studentName} telah dihapus dari perangkat!`,
+      });
+      setTimeout(() => setSyncNotice(null), 3000);
+    }
   };
 
   const handlePrintStudent = (st: Student) => {
@@ -256,24 +352,102 @@ export function App() {
   };
 
   // Activity Log Actions
-  const handleSaveActivity = (item: ActivityLog) => {
+  const handleSaveActivity = async (item: ActivityLog) => {
     if (!isAdmin) {
       handleRequireAdmin();
       return;
     }
     StorageService.saveActivity(item);
     reloadData();
-    triggerAutoPush();
+
+    const cfg = SheetsSyncService.getConfig();
+    if (cfg.webAppUrl && cfg.autoSyncEnabled) {
+      setSyncNotice({
+        type: 'loading',
+        message: `Menyimpan kegiatan "${item.title}" & sinkronisasi ke Spreadsheet...`,
+      });
+      setIsSheetsSyncing(true);
+      try {
+        const res = await SheetsSyncService.pushToSheets();
+        if (res.success) {
+          setSyncNotice({
+            type: 'success',
+            message: `Kegiatan & 8 Dimensi Profil Lulusan berhasil disimpan di Spreadsheet!`,
+          });
+          setTimeout(() => setSyncNotice(null), 4000);
+        } else {
+          setSyncNotice({
+            type: 'error',
+            message: `Tersimpan secara lokal. Spreadsheet: ${res.message}`,
+          });
+          setTimeout(() => setSyncNotice(null), 5000);
+        }
+      } catch (err: any) {
+        setSyncNotice({
+          type: 'error',
+          message: `Tersimpan secara lokal. Gagal sinkron: ${err.message}`,
+        });
+        setTimeout(() => setSyncNotice(null), 5000);
+      } finally {
+        setIsSheetsSyncing(false);
+      }
+    } else {
+      setSyncNotice({
+        type: 'success',
+        message: `Kegiatan "${item.title}" berhasil tersimpan!`,
+      });
+      setTimeout(() => setSyncNotice(null), 3000);
+    }
   };
 
-  const handleDeleteActivity = (id: string) => {
+  const handleDeleteActivity = async (id: string) => {
     if (!isAdmin) {
       handleRequireAdmin();
       return;
     }
+    const act = activities.find((a) => a.id === id);
+    const actTitle = act ? act.title : 'Kegiatan';
     StorageService.deleteActivity(id);
     reloadData();
-    triggerAutoPush();
+
+    const cfg = SheetsSyncService.getConfig();
+    if (cfg.webAppUrl && cfg.autoSyncEnabled) {
+      setSyncNotice({
+        type: 'loading',
+        message: `Menghapus kegiatan "${actTitle}" dari Spreadsheet...`,
+      });
+      setIsSheetsSyncing(true);
+      try {
+        const res = await SheetsSyncService.pushToSheets();
+        if (res.success) {
+          setSyncNotice({
+            type: 'success',
+            message: `Kegiatan berhasil dihapus dari Google Spreadsheet & lokal!`,
+          });
+          setTimeout(() => setSyncNotice(null), 4000);
+        } else {
+          setSyncNotice({
+            type: 'error',
+            message: `Dihapus secara lokal. Spreadsheet: ${res.message}`,
+          });
+          setTimeout(() => setSyncNotice(null), 5000);
+        }
+      } catch (err: any) {
+        setSyncNotice({
+          type: 'error',
+          message: `Dihapus secara lokal. Gagal sinkron: ${err.message}`,
+        });
+        setTimeout(() => setSyncNotice(null), 5000);
+      } finally {
+        setIsSheetsSyncing(false);
+      }
+    } else {
+      setSyncNotice({
+        type: 'success',
+        message: `Kegiatan telah dihapus!`,
+      });
+      setTimeout(() => setSyncNotice(null), 3000);
+    }
   };
 
   // Consultation Actions
@@ -939,6 +1113,33 @@ export function App() {
         onSuccess={handleLoginAdmin}
         onAuthenticated={handleLoginAdmin}
       />
+
+      {/* Floating Synchronization Toast Feedback */}
+      {syncNotice && (
+        <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-50 max-w-sm w-full animate-in fade-in slide-in-from-bottom-3 duration-300">
+          <div
+            className={`p-3.5 rounded-2xl shadow-2xl border flex items-center gap-3 backdrop-blur-md ${
+              syncNotice.type === 'loading'
+                ? 'bg-blue-900/95 text-white border-blue-700'
+                : syncNotice.type === 'success'
+                ? 'bg-emerald-900/95 text-white border-emerald-700'
+                : 'bg-rose-900/95 text-white border-rose-700'
+            }`}
+          >
+            {syncNotice.type === 'loading' && <Loader2 className="w-5 h-5 animate-spin text-blue-300 shrink-0" />}
+            {syncNotice.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0" />}
+            {syncNotice.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-300 shrink-0" />}
+            <div className="flex-1 text-xs font-medium leading-snug">{syncNotice.message}</div>
+            <button
+              onClick={() => setSyncNotice(null)}
+              className="text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/10"
+              title="Tutup Notifikasi"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

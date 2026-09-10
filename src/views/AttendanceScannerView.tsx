@@ -39,6 +39,7 @@ import {
   ZoomIn,
   Scan,
   Maximize2,
+  Contrast,
 } from 'lucide-react';
 
 interface AttendanceScannerViewProps {
@@ -126,7 +127,10 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
   const [isTorchOn, setIsTorchOn] = useState<boolean>(false);
   const [isZoomSupported, setIsZoomSupported] = useState<boolean>(false);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const [scanMode, setScanMode] = useState<'wide' | 'standard'>('wide');
+  const [softwareZoom, setSoftwareZoom] = useState<number>(1);
+  const [contrastBoost, setContrastBoost] = useState<boolean>(false);
+  const [hasNativeDetector, setHasNativeDetector] = useState<boolean>(false);
+  const [scanMode, setScanMode] = useState<'wide' | 'standard' | 'full'>('wide');
 
   // Form controls for scan session
   const [selectedStatus, setSelectedStatus] = useState<AttendanceStatus>('Hadir');
@@ -146,6 +150,8 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
 
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const isProcessingRef = useRef<boolean>(false);
+  const isCameraActiveRef = useRef<boolean>(false);
+  const videoWatchdogRef = useRef<any>(null);
   const lastScannedCodeRef = useRef<string>('');
   const lastScanTimeRef = useRef<number>(0);
   const manualInputRef = useRef<HTMLInputElement | null>(null);
@@ -323,29 +329,53 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
   };
 
   const toggleZoom = async () => {
-    if (!html5QrCodeRef.current) return;
-    try {
-      const caps = html5QrCodeRef.current.getRunningTrackCameraCapabilities();
-      if (caps && caps.zoomFeature && caps.zoomFeature().isSupported()) {
-        const nextZoom = zoomLevel >= 2 ? 1 : 2;
-        await caps.zoomFeature().apply(nextZoom);
-        setZoomLevel(nextZoom);
+    // Try hardware zoom first if available
+    if (html5QrCodeRef.current && isZoomSupported) {
+      try {
+        const caps = html5QrCodeRef.current.getRunningTrackCameraCapabilities();
+        if (caps && caps.zoomFeature && caps.zoomFeature().isSupported()) {
+          const nextZoom = zoomLevel >= 2 ? 1 : 2;
+          await caps.zoomFeature().apply(nextZoom);
+          setZoomLevel(nextZoom);
+          return;
+        }
+      } catch (err) {
+        console.warn('Hardware zoom fallback to software:', err);
       }
-    } catch (err) {
-      console.warn('Zoom toggle error:', err);
+    }
+    // Software zoom fallback (1x -> 1.4x -> 1.8x -> 1x)
+    const nextSoft = softwareZoom === 1 ? 1.4 : softwareZoom === 1.4 ? 1.8 : 1;
+    setSoftwareZoom(nextSoft);
+    const vid = document.querySelector('#qr-code-scanner-reader video') as HTMLVideoElement | null;
+    if (vid) {
+      vid.style.transform = nextSoft > 1 ? `scale(${nextSoft})` : 'none';
+    }
+  };
+
+  const toggleContrastBoost = () => {
+    const next = !contrastBoost;
+    setContrastBoost(next);
+    const vid = document.querySelector('#qr-code-scanner-reader video') as HTMLVideoElement | null;
+    if (vid) {
+      vid.style.filter = next ? 'contrast(1.35) brightness(1.08) saturate(1.15)' : 'none';
     }
   };
 
   const toggleScanMode = () => {
-    const nextMode = scanMode === 'wide' ? 'standard' : 'wide';
+    const nextMode = scanMode === 'wide' ? 'standard' : scanMode === 'standard' ? 'full' : 'wide';
     setScanMode(nextMode);
-    if (isCameraActive) {
-      startCamera(selectedCameraId || currentFacingMode);
+    if (isCameraActiveRef.current) {
+      startCamera(selectedCameraId || currentFacingMode, nextMode);
     }
   };
 
   // Stop camera safely and release stream
   const stopCamera = async () => {
+    isCameraActiveRef.current = false;
+    if (videoWatchdogRef.current) {
+      clearInterval(videoWatchdogRef.current);
+      videoWatchdogRef.current = null;
+    }
     if (html5QrCodeRef.current) {
       try {
         if (html5QrCodeRef.current.isScanning) {
@@ -355,13 +385,17 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
       } catch (err) {
         console.warn('Failed to cleanly stop camera', err);
       }
+      html5QrCodeRef.current = null;
     }
     setIsCameraActive(false);
     setIsTorchOn(false);
   };
 
   // Start Html5Qrcode scanner with multi-tier fallback (environment -> user -> device)
-  const startCamera = async (overrideTarget?: 'environment' | 'user' | string) => {
+  const startCamera = async (
+    overrideTarget?: 'environment' | 'user' | string,
+    modeOverride?: 'wide' | 'standard' | 'full'
+  ) => {
     setCameraError(null);
     setIsStartingCamera(true);
 
@@ -373,80 +407,76 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
       ? overrideTarget
       : (isMobileDevice ? 'environment' : 'user');
 
-    // Rectangular scanbox optimal for both horizontal barcodes (NISN/Code 128) and square QR codes
-    const qrConfig = {
-      fps: 25, // 25 FPS high responsiveness
-      qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-        const vw = viewfinderWidth || 320;
-        const vh = viewfinderHeight || 320;
-        if (scanMode === 'wide') {
-          // Ultra-wide field of view for rapid barcode capture from any angle/distance
-          const width = Math.min(vw - 16, 420);
-          const height = Math.min(vh - 16, Math.max(180, Math.floor(width * 0.72)));
-          return { width, height };
-        }
-        const minDim = Math.min(vw, vh);
-        const width = Math.min(320, Math.max(200, Math.floor(minDim * 0.82)));
-        const height = Math.min(220, Math.max(140, Math.floor(width * 0.65)));
-        return { width, height };
-      },
-      videoConstraints: {
-        facingMode: targetFacing,
-        width: { min: 640, ideal: 1280, max: 1920 },
-        height: { min: 480, ideal: 720, max: 1080 },
-        focusMode: 'continuous',
-      },
+    const effectiveScanMode = modeOverride || scanMode;
+
+    // Fast and responsive scanner config
+    const qrConfig: any = {
+      fps: 22,
       disableFlip: false,
     };
+
+    if (effectiveScanMode === 'wide') {
+      // Wide rectangular scanbox optimal for horizontal 1D barcodes (NISN Code 128)
+      qrConfig.qrbox = (viewfinderWidth: number, viewfinderHeight: number) => {
+        const vw = viewfinderWidth || 320;
+        const vh = viewfinderHeight || 320;
+        const width = Math.min(vw - 16, 480);
+        const height = Math.min(vh - 16, Math.max(140, Math.floor(width * 0.48)));
+        return { width, height };
+      };
+    } else if (effectiveScanMode === 'standard') {
+      // Square box for QR codes
+      qrConfig.qrbox = (viewfinderWidth: number, viewfinderHeight: number) => {
+        const minDim = Math.min(viewfinderWidth || 320, viewfinderHeight || 320);
+        const size = Math.max(180, Math.floor(minDim * 0.75));
+        return { width: size, height: size };
+      };
+    }
+    // If 'full', qrbox is omitted -> full video frame scanning for maximum speed
 
     const handleSuccess = (decodedText: string) => {
       if (!isProcessingRef.current) {
         isProcessingRef.current = true;
-        // Instant haptic feedback vibration on mobile devices
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
           try {
             navigator.vibrate([60, 40, 60]);
           } catch (e) {}
         }
         processDecodedText(decodedText);
-        // Ultra-responsive turnaround (350ms) for consecutive cards
+        // Ultra-responsive turnaround (300ms) for rapid consecutive card scanning
         setTimeout(() => {
           isProcessingRef.current = false;
-        }, 350);
+        }, 300);
       }
     };
 
     try {
-      if (!html5QrCodeRef.current) {
-        html5QrCodeRef.current = new Html5Qrcode('qr-code-scanner-reader', {
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.QR_CODE,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.CODE_93,
-            Html5QrcodeSupportedFormats.CODABAR,
-            Html5QrcodeSupportedFormats.DATA_MATRIX,
-            Html5QrcodeSupportedFormats.ITF,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.PDF_417,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-          ],
+      // Create fresh Html5Qrcode instance with streamlined formats (prevents CPU lag)
+      html5QrCodeRef.current = new Html5Qrcode('qr-code-scanner-reader', {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.EAN_8,
+        ],
+        useBarCodeDetectorIfSupported: true,
+        experimentalFeatures: {
           useBarCodeDetectorIfSupported: true,
-          experimentalFeatures: {
-            useBarCodeDetectorIfSupported: true,
-          },
-          verbose: false,
-        });
-      }
+        },
+        verbose: false,
+      });
 
       // Try discovering cameras if available
       let discoveredDevices: Array<{ id: string; label: string }> = [];
       try {
         const devs = await Html5Qrcode.getCameras();
         if (devs && devs.length > 0) {
-          discoveredDevices = devs.map((d) => ({ id: d.id, label: d.label || `Kamera ${d.id.slice(0, 8)}` }));
+          discoveredDevices = devs.map((d) => ({
+            id: d.id,
+            label: d.label || `Kamera ${d.id.slice(0, 8)}`,
+          }));
           setAvailableCameras(discoveredDevices);
         }
       } catch (e) {
@@ -457,14 +487,11 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
       const attempts: any[] = [];
 
       if (typeof overrideTarget === 'string' && overrideTarget !== 'environment' && overrideTarget !== 'user') {
-        // Specific device ID requested
         attempts.push(overrideTarget);
       } else if (selectedCameraId && !overrideTarget) {
-        // Use previously selected device ID
         attempts.push(selectedCameraId);
       }
 
-      // Add facing mode configurations
       if (targetFacing === 'user') {
         attempts.push({ facingMode: 'user' });
         attempts.push({ facingMode: 'environment' });
@@ -473,12 +500,14 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
         attempts.push({ facingMode: 'user' });
       }
 
-      // Add all discovered hardware devices as last line of defense
       for (const dev of discoveredDevices) {
         if (!attempts.includes(dev.id)) {
           attempts.push(dev.id);
         }
       }
+
+      // Basic unconstrained fallback
+      attempts.push({});
 
       let started = false;
       let lastErr: any = null;
@@ -506,6 +535,7 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
 
       if (started) {
         setIsCameraActive(true);
+        isCameraActiveRef.current = true;
         setCameraError(null);
 
         // Hardware capabilities detection (torch & zoom)
@@ -528,8 +558,8 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
           setIsZoomSupported(false);
         }
 
-        // Crucial: ensure the HTML5 video element is active, muted, unpaused, and filled properly
-        setTimeout(() => {
+        // Active video watch & style enforcement to eliminate black screen issues
+        const applyVideoTweaks = () => {
           const reader = document.getElementById('qr-code-scanner-reader');
           if (reader) {
             const vid = reader.querySelector('video') as HTMLVideoElement | null;
@@ -542,12 +572,58 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
               vid.style.minHeight = '280px';
               vid.style.objectFit = 'cover';
               vid.style.display = 'block';
+              if (softwareZoom > 1) {
+                vid.style.transform = `scale(${softwareZoom})`;
+              }
+              if (contrastBoost) {
+                vid.style.filter = 'contrast(1.35) brightness(1.08) saturate(1.15)';
+              }
               if (vid.paused) {
-                vid.play().catch((playErr) => console.warn('Forced video play notice:', playErr));
+                vid.play().catch(() => {});
               }
             }
           }
-        }, 200);
+        };
+
+        applyVideoTweaks();
+        setTimeout(applyVideoTweaks, 150);
+        setTimeout(applyVideoTweaks, 500);
+
+        if (videoWatchdogRef.current) clearInterval(videoWatchdogRef.current);
+        videoWatchdogRef.current = setInterval(applyVideoTweaks, 500);
+
+        // Native BarcodeDetector Hardware Acceleration Loop
+        if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+          try {
+            const nativeDetector = new (window as any).BarcodeDetector({
+              formats: ['code_128', 'qr_code', 'code_39', 'ean_13', 'upc_a', 'ean_8'],
+            });
+            setHasNativeDetector(true);
+            const runNativeLoop = async () => {
+              if (!isCameraActiveRef.current) return;
+              const vid = document.querySelector('#qr-code-scanner-reader video') as HTMLVideoElement | null;
+              if (vid && vid.readyState >= 2 && !vid.paused && vid.videoWidth > 0) {
+                try {
+                  const detected = await nativeDetector.detect(vid);
+                  if (detected && detected.length > 0) {
+                    for (const item of detected) {
+                      if (item.rawValue) {
+                        handleSuccess(item.rawValue);
+                        break;
+                      }
+                    }
+                  }
+                } catch (err) {}
+              }
+              if (isCameraActiveRef.current) {
+                requestAnimationFrame(runNativeLoop);
+              }
+            };
+            requestAnimationFrame(runNativeLoop);
+          } catch (err) {
+            // Native detector format unsupported, Html5Qrcode handles it
+          }
+        }
       } else {
         throw lastErr || new Error('Gagal memulai sumber video kamera');
       }
@@ -566,11 +642,12 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
         friendlyMsg =
           'Kamera fisik tidak terdeteksi pada perangkat ini. Anda dapat menggunakan mode Input Barcode Manual atau USB Scanner Gun di bawah.';
       } else {
-        friendlyMsg = `Kendala akses kamera: ${errMsg}. Silakan pilih kamera lain dari daftar pilihan atau upload foto barcode di bawah.`;
+        friendlyMsg = `Kendala akses kamera: ${errMsg}. Silakan klik tombol "Segarkan Kamera" atau pilih kamera lain dari daftar pilihan.`;
       }
 
       setCameraError(friendlyMsg);
       setIsCameraActive(false);
+      isCameraActiveRef.current = false;
     } finally {
       setIsStartingCamera(false);
     }
@@ -653,6 +730,11 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
 
     return () => {
       isMounted = false;
+      isCameraActiveRef.current = false;
+      if (videoWatchdogRef.current) {
+        clearInterval(videoWatchdogRef.current);
+        videoWatchdogRef.current = null;
+      }
       if (html5QrCodeRef.current) {
         try {
           if (html5QrCodeRef.current.isScanning) {
@@ -662,6 +744,7 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
         } catch (e) {
           // ignore cleanup errors
         }
+        html5QrCodeRef.current = null;
       }
     };
   }, []);
@@ -938,15 +1021,21 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
 
                 {/* Active camera top bar with refresh/switch and diagnostics */}
                 {isCameraActive && (
-                  <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-auto bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-white text-xs z-30">
+                  <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-auto bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/15 text-white text-xs z-30 shadow-lg">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
                       <span className="font-semibold text-emerald-300 truncate text-[11px] sm:text-xs">
-                        Scanner Berjalan ({currentFacingMode === 'environment' ? 'Belakang' : 'Depan / Webcam'})
+                        {currentFacingMode === 'environment' ? 'Kamera Belakang' : 'Kamera Depan'}
                       </span>
+                      {hasNativeDetector && (
+                        <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-sm border border-emerald-500/40">
+                          <Zap className="w-2.5 h-2.5 text-emerald-400" />
+                          <span>Turbo HW</span>
+                        </span>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                       {isTorchSupported && (
                         <button
                           onClick={toggleTorch}
@@ -966,29 +1055,42 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
                         </button>
                       )}
 
-                      {isZoomSupported && (
-                        <button
-                          onClick={toggleZoom}
-                          className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 border ${
-                            zoomLevel > 1.2
-                              ? 'bg-emerald-700 text-white border-emerald-500'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                          }`}
-                          title="Ubah pembesaran kamera (Zoom)"
-                        >
-                          <ZoomIn className="w-3 h-3" />
-                          <span>{zoomLevel > 1.2 ? '2x' : '1x'}</span>
-                        </button>
-                      )}
+                      <button
+                        onClick={toggleZoom}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 border ${
+                          zoomLevel > 1.2 || softwareZoom > 1.1
+                            ? 'bg-emerald-700 text-white border-emerald-500'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                        }`}
+                        title="Perbesar kamera (Zoom 1x / 1.4x / 1.8x)"
+                      >
+                        <ZoomIn className="w-3 h-3 text-emerald-400" />
+                        <span>{zoomLevel > 1.2 ? '2x' : softwareZoom > 1.1 ? `${softwareZoom}x` : '1x'}</span>
+                      </button>
+
+                      <button
+                        onClick={toggleContrastBoost}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 border ${
+                          contrastBoost
+                            ? 'bg-amber-500/90 text-slate-950 border-amber-400 font-bold'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                        }`}
+                        title="Tingkatkan kontras barcode untuk pembacaan lebih cepat"
+                      >
+                        <Contrast className="w-3 h-3 text-amber-300" />
+                        <span className="hidden sm:inline">Kontras</span>
+                      </button>
 
                       <button
                         onClick={toggleScanMode}
                         className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 border ${
                           scanMode === 'wide'
                             ? 'bg-emerald-900/90 text-emerald-300 border-emerald-600'
+                            : scanMode === 'full'
+                            ? 'bg-blue-900/90 text-blue-300 border-blue-600'
                             : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
                         }`}
-                        title="Alihkan mode jangkauan pemindaian"
+                        title="Alihkan mode kotak: Barcode 1D (lebar) / QR Persegi / Pindai Layar Penuh"
                       >
                         {scanMode === 'wide' ? (
                           <Maximize2 className="w-3 h-3 text-emerald-400" />
@@ -996,14 +1098,14 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
                           <Scan className="w-3 h-3 text-slate-300" />
                         )}
                         <span className="hidden sm:inline">
-                          {scanMode === 'wide' ? 'Area Luas (Cepat)' : 'Kotak Fokus'}
+                          {scanMode === 'wide' ? 'Barcode 1D' : scanMode === 'standard' ? 'QR Persegi' : 'Layar Penuh'}
                         </span>
                       </button>
 
                       <button
                         onClick={() => startCamera(selectedCameraId || currentFacingMode)}
-                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold transition-colors flex items-center gap-1 border border-slate-700"
-                        title="Segarkan stream video jika layar tampak hitam"
+                        className="px-2 py-1 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-[11px] font-semibold transition-colors flex items-center gap-1 border border-emerald-700/60"
+                        title="Segarkan stream video jika layar tampak hitam atau freeze"
                       >
                         <RefreshCw className="w-3 h-3 text-emerald-400" />
                         <span className="hidden sm:inline">Segarkan</span>
