@@ -8,8 +8,10 @@ import {
   StudentCase,
   SchoolProfile,
   ActivityLog,
+  AttendanceRecord,
 } from '../types';
 import { SheetsSyncService, GoogleAppsScriptTemplate } from '../services/sheetsSync';
+import { StorageService } from '../services/storage';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   X,
@@ -43,6 +45,7 @@ interface SheetsSyncModalProps {
   onClose: () => void;
   students: Student[];
   activities?: ActivityLog[];
+  attendances?: AttendanceRecord[];
   consultations: Consultation[];
   collaborations: Collaboration[];
   cases: StudentCase[];
@@ -55,6 +58,7 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
   onClose,
   students,
   activities = [],
+  attendances = [],
   consultations,
   collaborations,
   cases,
@@ -122,11 +126,20 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
     try {
       const result = await SheetsSyncService.testConnection(config.webAppUrl.trim());
       if (result.success) {
-        SheetsSyncService.saveConfig(config);
+        const updatedConfig = {
+          ...config,
+          spreadsheetUrl: result.data?.spreadsheetUrl || config.spreadsheetUrl || '',
+          lastSyncTime: new Date().toISOString(),
+        };
+        SheetsSyncService.saveConfig(updatedConfig);
+        setConfig(updatedConfig);
         setStatusMessage({
           type: 'success',
           text: 'Koneksi Berhasil! Aplikasi terhubung secara real-time ke Google Spreadsheet.',
         });
+        if (result.data) {
+          onSyncComplete();
+        }
       } else {
         setStatusMessage({
           type: 'error',
@@ -189,6 +202,7 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
       const payload: FullSyncPayload = {
         students,
         activities,
+        attendances: attendances.length > 0 ? attendances : StorageService.getAttendances(),
         consultations,
         collaborations,
         cases,
@@ -199,7 +213,7 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
       if (result.success) {
         setStatusMessage({
           type: 'success',
-          text: 'Semua data murid, kegiatan pembiasaan, konsultasi, kolaborasi, SOP kasus & profil berhasil disimpan ke Google Spreadsheet!',
+          text: 'Semua data murid, presensi, kegiatan pembiasaan, konsultasi, kolaborasi, SOP kasus & profil berhasil disimpan ke Google Spreadsheet!',
         });
         setConfig(SheetsSyncService.getConfig());
         onSyncComplete();
@@ -487,7 +501,7 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
                       className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
                     />
                     <span className="text-xs font-medium text-slate-700">
-                      Aktifkan Sinkronisasi Latar Belakang Otomatis (Setiap 25 detik)
+                      Aktifkan Sinkronisasi Latar Belakang Otomatis (Setiap 2 Menit)
                     </span>
                   </label>
 

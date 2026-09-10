@@ -171,6 +171,10 @@ export function App() {
     } catch {}
 
     const doPull = async () => {
+      if (!SheetsSyncService.isConfigured()) {
+        return;
+      }
+
       // Guard: Do not auto-pull if local edits were made within the last 20 seconds
       // This prevents remote polling from racing or overwriting in-flight saves
       const lastLocalEdit = StorageService.getLastLocalEditTime();
@@ -181,27 +185,37 @@ export function App() {
       const cfg = SheetsSyncService.getConfig();
       if (cfg.webAppUrl && cfg.autoSyncEnabled) {
         setIsSheetsSyncing(true);
-        const res = await SheetsSyncService.pullFromSheets();
-        setIsSheetsSyncing(false);
-        if (res.success) {
-          reloadData();
+        try {
+          const res = await SheetsSyncService.pullFromSheets();
+          if (res.success) {
+            reloadData();
+          }
+        } catch (err) {
+          console.warn('Background sync pull skipped:', err);
+        } finally {
+          setIsSheetsSyncing(false);
         }
       }
     };
 
-    // Initial pull on mount if configured
+    // Initial pull on mount only if configured
     if (SheetsSyncService.isConfigured()) {
       doPull();
     }
 
-    // Interval polling every 25 seconds for cross-device real-time updates
+    // Interval polling every 2 minutes (120 seconds) for cross-device real-time sync
+    const syncIntervalMs = (SheetsSyncService.getConfig().syncIntervalSeconds || 120) * 1000;
     const interval = setInterval(() => {
-      doPull();
-    }, 25000);
+      if (SheetsSyncService.isConfigured()) {
+        doPull();
+      }
+    }, syncIntervalMs);
 
     // Sync on window focus when user returns to this tab
     const handleFocus = () => {
-      doPull();
+      if (SheetsSyncService.isConfigured()) {
+        doPull();
+      }
     };
     window.addEventListener('focus', handleFocus);
 
@@ -1097,6 +1111,7 @@ export function App() {
         }}
         students={students}
         activities={activities}
+        attendances={attendances}
         consultations={consultations}
         collaborations={collaborations}
         cases={cases}

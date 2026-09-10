@@ -27,7 +27,7 @@ export function getIndonesianDayName(dateString: string): string {
 }
 
 export function formatIndonesianDate(dateString: string): string {
-  if (!dateString) return '-';
+  if (!dateString || typeof dateString !== 'string') return '-';
   try {
     // Handle DD-MM-YYYY or YYYY-MM-DD
     if (/^\d{2}-\d{2}-\d{4}$/.test(dateString)) {
@@ -45,7 +45,7 @@ export function formatIndonesianDate(dateString: string): string {
 
 export function formatPeriod(yearMonth: string): string {
   // yearMonth: "2026-08"
-  if (!yearMonth) return 'Agustus 2026';
+  if (!yearMonth || typeof yearMonth !== 'string') return 'AGUSTUS 2026';
   const parts = yearMonth.split('-');
   if (parts.length === 2) {
     const monthIdx = parseInt(parts[1], 10) - 1;

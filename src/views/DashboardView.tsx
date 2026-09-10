@@ -280,7 +280,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     >();
 
     attendances.forEach((att) => {
-      const d = att.date;
+      const d = att?.date;
+      if (!d || typeof d !== 'string') return;
       if (!dateMap.has(d)) {
         const parts = d.split('-');
         const shortDate = parts.length === 3 ? `${parts[2]}/${parts[1]}` : d;

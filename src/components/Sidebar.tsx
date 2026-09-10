@@ -226,18 +226,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center font-bold text-white text-xs uppercase shrink-0 shadow-sm ring-2 ring-emerald-400/40">
-              {profile.homeroomTeacherName
+              {(profile?.homeroomTeacherName || 'Abdul Rahman Bahsoan')
                 .split(' ')
                 .map((n) => n[0])
                 .slice(0, 2)
                 .join('') || 'AB'}
             </div>
             <div className="min-w-0 overflow-hidden">
-              <p className="text-xs font-semibold text-white truncate" title={profile.homeroomTeacherName}>
-                {profile.homeroomTeacherName}
+              <p className="text-xs font-semibold text-white truncate" title={profile?.homeroomTeacherName || 'Abdul Rahman Bahsoan'}>
+                {profile?.homeroomTeacherName || 'Abdul Rahman Bahsoan'}
               </p>
               <p className="text-[10px] text-blue-300 truncate">
-                Guru Wali {profile.expertiseProgram}
+                Guru Wali {profile?.expertiseProgram || 'DKV'}
               </p>
             </div>
           </div>

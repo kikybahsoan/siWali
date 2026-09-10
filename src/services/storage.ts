@@ -527,18 +527,18 @@ export const StorageService = {
         localStorage.setItem(KEYS.PROFILE, JSON.stringify(INITIAL_SCHOOL_PROFILE));
         return INITIAL_SCHOOL_PROFILE;
       }
-      const parsed: SchoolProfile = JSON.parse(data);
+      const parsed = JSON.parse(data);
+      const merged: SchoolProfile = {
+        ...INITIAL_SCHOOL_PROFILE,
+        ...(parsed && typeof parsed === 'object' ? parsed : {}),
+      };
       // Auto-upgrade if previous default principal name was Yakob Saleh
-      if (parsed.principalName === 'Drs. H. Yakob A. Saleh, M.Pd' || parsed.principalNip === '19680512 199403 1 008') {
-        const upgraded: SchoolProfile = {
-          ...parsed,
-          principalName: 'Drs. Jakub A GuE',
-          principalNip: '196706081994121002',
-        };
-        localStorage.setItem(KEYS.PROFILE, JSON.stringify(upgraded));
-        return upgraded;
+      if (merged.principalName === 'Drs. H. Yakob A. Saleh, M.Pd' || merged.principalNip === '19680512 199403 1 008') {
+        merged.principalName = 'Drs. Jakub A GuE';
+        merged.principalNip = '196706081994121002';
       }
-      return parsed;
+      localStorage.setItem(KEYS.PROFILE, JSON.stringify(merged));
+      return merged;
     } catch {
       return INITIAL_SCHOOL_PROFILE;
     }
@@ -584,7 +584,11 @@ export const StorageService = {
       StorageService.saveCases(data.cases);
     }
     if (data.profile && typeof data.profile === 'object' && Object.keys(data.profile).length > 0) {
-      StorageService.saveProfile(data.profile);
+      const current = StorageService.getProfile();
+      StorageService.saveProfile({
+        ...current,
+        ...data.profile,
+      });
     }
   },
 

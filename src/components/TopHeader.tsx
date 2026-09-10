@@ -149,17 +149,17 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </div>
         )}
 
-        {/* Google Spreadsheet Sync Badge & Button (Admin only or view info) */}
+        {/* Google Spreadsheet Sync Badge & Button */}
         {onOpenSheetsSync && (
           <button
             id="header-sheets-sync-btn"
-            onClick={isAdmin ? onOpenSheetsSync : onOpenAuthModal}
+            onClick={onOpenSheetsSync}
             className={`px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs active:scale-95 border ${
               isSheetsConfigured
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
                 : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
             }`}
-            title={isAdmin ? 'Integrasi & Sinkronisasi Real-Time Google Spreadsheet' : 'Login Admin untuk kelola Sinkronisasi Spreadsheet'}
+            title="Integrasi & Sinkronisasi Real-Time Google Spreadsheet"
           >
             {isSheetsConfigured ? (
               <>

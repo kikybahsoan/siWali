@@ -3,14 +3,15 @@ import { StorageService } from './storage';
 
 const SHEETS_CONFIG_KEY = 'siwali_sheets_sync_config_v1';
 
-export const DEFAULT_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz8odQurm_YBWJVhMglT8z4NH9d1OO9odFL37laRn9l8mWTn1BpAGiWx_ias0X5606YtQ/exec';
+export const DEFAULT_SHEETS_WEB_APP_URL =
+  'https://script.google.com/macros/s/AKfycbwyFanvCA1kSeZ8_jKEQSmDmlggpuGdcJEN29kCsM8a4QNiH6Sf3mqLIId2Ipfa_XJK/exec';
 
 export const DEFAULT_SHEETS_CONFIG: GoogleSheetsConfig = {
   webAppUrl: DEFAULT_SHEETS_WEB_APP_URL,
   spreadsheetUrl: '',
   lastSyncTime: '',
   autoSyncEnabled: true,
-  syncIntervalSeconds: 25,
+  syncIntervalSeconds: 120, // 2 Menit
 };
 
 export const GoogleAppsScriptTemplate = `/**
@@ -700,13 +701,35 @@ export const SheetsSyncService = {
     try {
       const data = localStorage.getItem(SHEETS_CONFIG_KEY);
       let parsed = data ? JSON.parse(data) : {};
-      
-      // If webAppUrl is empty or blank, fallback to DEFAULT_SHEETS_WEB_APP_URL
-      if (!parsed.webAppUrl || typeof parsed.webAppUrl !== 'string' || parsed.webAppUrl.trim() === '') {
+
+      // Auto-populate or migrate to the user's active Google Apps Script Web App URL
+      if (
+        !parsed.webAppUrl ||
+        typeof parsed.webAppUrl !== 'string' ||
+        parsed.webAppUrl.trim() === '' ||
+        parsed.webAppUrl.includes('AKfycbz8odQurm_YBWJVhMglT8z4NH9d1OO9odFL37laRn9l8mWTn1BpAGiWx_ias0X5606YtQ') ||
+        !parsed.webAppUrl.startsWith('https://script.google.com/macros/s/')
+      ) {
         parsed.webAppUrl = DEFAULT_SHEETS_WEB_APP_URL;
+        parsed.autoSyncEnabled = true;
+      } else {
+        parsed.webAppUrl = parsed.webAppUrl.trim();
       }
 
-      return { ...DEFAULT_SHEETS_CONFIG, ...parsed };
+      if (!parsed.spreadsheetUrl) {
+        parsed.spreadsheetUrl = 'https://docs.google.com/spreadsheets/d/1_Q7LKCY5xJROp3Ux2jueO8dSElyHEtK7BYW3aSYh8VQ/edit';
+      }
+
+      if (!parsed.syncIntervalSeconds || parsed.syncIntervalSeconds === 25) {
+        parsed.syncIntervalSeconds = 120; // 2 Menit
+      }
+
+      const merged = { ...DEFAULT_SHEETS_CONFIG, ...parsed };
+      try {
+        localStorage.setItem(SHEETS_CONFIG_KEY, JSON.stringify(merged));
+      } catch {}
+
+      return merged;
     } catch {
       return DEFAULT_SHEETS_CONFIG;
     }
@@ -716,13 +739,17 @@ export const SheetsSyncService = {
     try {
       localStorage.setItem(SHEETS_CONFIG_KEY, JSON.stringify(config));
     } catch (e) {
-      console.error('Failed to save Google Sheets sync config', e);
+      console.warn('Failed to save Google Sheets sync config', e);
     }
   },
 
   isConfigured: (): boolean => {
     const cfg = SheetsSyncService.getConfig();
-    return Boolean(cfg.webAppUrl && cfg.webAppUrl.trim().startsWith('https://script.google.com/'));
+    return Boolean(
+      cfg.webAppUrl &&
+        cfg.webAppUrl.trim().startsWith('https://script.google.com/macros/s/') &&
+        !cfg.webAppUrl.includes('AKfycbz8odQurm_YBWJVhMglT8z4NH9d1OO9odFL37laRn9l8mWTn1BpAGiWx_ias0X5606YtQ')
+    );
   },
 
   getShareableSyncUrl: (baseUrl?: string): string => {
@@ -771,7 +798,7 @@ export const SheetsSyncService = {
   // Pull latest data from Google Sheets Web App
   pullFromSheets: async (webAppUrl?: string): Promise<{ success: boolean; data?: FullSyncPayload; message: string }> => {
     const url = webAppUrl || SheetsSyncService.getConfig().webAppUrl;
-    if (!url || !url.trim().startsWith('https://script.google.com/')) {
+    if (!url || !url.trim().startsWith('https://script.google.com/macros/s/')) {
       return { success: false, message: 'URL Google Apps Script Web App belum diatur.' };
     }
 
@@ -799,6 +826,11 @@ export const SheetsSyncService = {
             data: remoteData,
             message: 'Data berhasil disinkronkan dari Google Spreadsheet.',
           };
+        } else if (proxyJson.status === 'error' || proxyJson.status === 'unconfigured') {
+          return {
+            success: false,
+            message: proxyJson.message || 'Gagal menyinkronkan data dengan Google Apps Script.',
+          };
         }
       }
     } catch {
@@ -810,21 +842,32 @@ export const SheetsSyncService = {
       const response = await fetch(`${url.trim()}?action=fetch_all&t=${Date.now()}`, {
         method: 'GET',
         headers: {
-          'Accept': 'application/json',
+          Accept: 'application/json',
         },
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+      const text = await response.text();
+      const trimmed = text.trim();
+
+      if (response.status === 404 || trimmed.includes('404 Not Found')) {
+        return {
+          success: false,
+          message: 'Deployment Web App Google Apps Script tidak ditemukan (HTTP 404).',
+        };
       }
 
-      const result = await response.json();
+      if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) {
+        return {
+          success: false,
+          message: 'Google Apps Script merespon dengan halaman HTML. Pastikan akses diatur ke "Siapa saja (Anyone)".',
+        };
+      }
+
+      const result = JSON.parse(trimmed);
       if (result.status === 'success' && result.data) {
         const remoteData = result.data;
-        // Import into local storage
         StorageService.importAllData(remoteData);
-        
-        // Update last sync time and spreadsheet URL if available
+
         const currentCfg = SheetsSyncService.getConfig();
         SheetsSyncService.saveConfig({
           ...currentCfg,
@@ -857,7 +900,7 @@ export const SheetsSyncService = {
     customPayload?: FullSyncPayload
   ): Promise<{ success: boolean; message: string }> => {
     const url = webAppUrl || SheetsSyncService.getConfig().webAppUrl;
-    if (!url || !url.trim().startsWith('https://script.google.com/')) {
+    if (!url || !url.trim().startsWith('https://script.google.com/macros/s/')) {
       return { success: false, message: 'URL Google Apps Script Web App belum diatur.' };
     }
 
@@ -894,6 +937,8 @@ export const SheetsSyncService = {
             lastSyncTime: new Date().toISOString(),
           });
           return { success: true, message: 'Data berhasil dikirim & disimpan di Google Spreadsheet!' };
+        } else if (proxyResult.status === 'error' || proxyResult.status === 'unconfigured') {
+          return { success: false, message: proxyResult.message || 'Gagal menyimpan ke Google Spreadsheet.' };
         }
       }
     } catch {
@@ -902,7 +947,6 @@ export const SheetsSyncService = {
 
     // 2. Direct browser fetch fallback
     try {
-      // Send as POST payload
       const response = await fetch(url.trim(), {
         method: 'POST',
         headers: {
@@ -911,7 +955,21 @@ export const SheetsSyncService = {
         body: JSON.stringify(payload),
       });
 
-      const result = await response.json();
+      const text = await response.text();
+      const trimmed = text.trim();
+
+      if (response.status === 404 || trimmed.includes('404 Not Found')) {
+        return { success: false, message: 'Deployment Web App Google Apps Script tidak ditemukan (HTTP 404).' };
+      }
+
+      if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) {
+        return {
+          success: false,
+          message: 'Google Apps Script merespon dengan halaman HTML. Pastikan akses diatur ke "Siapa saja (Anyone)".',
+        };
+      }
+
+      const result = JSON.parse(trimmed);
       if (result.status === 'success') {
         const currentCfg = SheetsSyncService.getConfig();
         SheetsSyncService.saveConfig({
@@ -923,26 +981,6 @@ export const SheetsSyncService = {
         return { success: false, message: result.message || 'Spreadsheet menolak data' };
       }
     } catch (err: any) {
-      // Fallback: If POST has CORS redirect issues in specific browser configs, try GET with payload chunk
-      try {
-        const jsonStr = encodeURIComponent(JSON.stringify(payload));
-        // If within URI length limits
-        if (jsonStr.length < 4000) {
-          const fallbackRes = await fetch(`${url.trim()}?action=push_all&payload=${jsonStr}&t=${Date.now()}`);
-          const fallbackJson = await fallbackRes.json();
-          if (fallbackJson.status === 'success') {
-            const currentCfg = SheetsSyncService.getConfig();
-            SheetsSyncService.saveConfig({
-              ...currentCfg,
-              lastSyncTime: new Date().toISOString(),
-            });
-            return { success: true, message: 'Data berhasil disimpan ke Google Spreadsheet (via GET fallback).' };
-          }
-        }
-      } catch (e) {
-        // ignore fallback error
-      }
-
       return {
         success: false,
         message: `Gagal mengirim data ke Google Sheets: ${err.message || 'CORS / Jaringan'}.`,
@@ -1012,16 +1050,52 @@ export const SheetsSyncService = {
 
   // Test connection to Google Apps Script Web App
   testConnection: async (webAppUrl: string): Promise<{ success: boolean; message: string; data?: any }> => {
-    if (!webAppUrl || !webAppUrl.trim().startsWith('https://script.google.com/')) {
+    if (!webAppUrl || !webAppUrl.trim().startsWith('https://script.google.com/macros/s/')) {
       return { success: false, message: 'URL harus diawali dengan https://script.google.com/macros/s/.../exec' };
+    }
+
+    // Try server proxy first
+    try {
+      const proxyUrl = `/api/sheets-sync?action=fetch_all&url=${encodeURIComponent(webAppUrl.trim())}&t=${Date.now()}`;
+      const proxyRes = await fetch(proxyUrl, { headers: { Accept: 'application/json' } });
+      if (proxyRes.ok) {
+        const proxyJson = await proxyRes.json();
+        if (proxyJson.status === 'success') {
+          return {
+            success: true,
+            message: 'Koneksi ke Google Spreadsheet Berhasil Terhubung!',
+            data: proxyJson.data,
+          };
+        }
+        return {
+          success: false,
+          message: proxyJson.message || 'Gagal terhubung ke Google Apps Script.',
+        };
+      }
+    } catch {
+      // Fallback to direct fetch
     }
 
     try {
       const response = await fetch(`${webAppUrl.trim()}?action=fetch_all&t=${Date.now()}`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const text = await response.text();
+      const trimmed = text.trim();
+
+      if (response.status === 404 || trimmed.includes('404 Not Found')) {
+        return {
+          success: false,
+          message: 'Deployment Web App Google Apps Script tidak ditemukan (HTTP 404).',
+        };
       }
-      const data = await response.json();
+
+      if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) {
+        return {
+          success: false,
+          message: 'Web App merespon dengan halaman web/HTML. Pastikan akses diatur ke "Siapa saja (Anyone)".',
+        };
+      }
+
+      const data = JSON.parse(trimmed);
       if (data.status === 'success') {
         return {
           success: true,

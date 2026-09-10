@@ -99,6 +99,7 @@ export const AttendanceRecapView: React.FC<AttendanceRecapViewProps> = ({
 
       // Month/Year filter for matrix or all
       if (selectedDateFilter === 'all' && viewMode === 'matrix') {
+        if (!att?.date || typeof att.date !== 'string') return false;
         const [y, m] = att.date.split('-');
         if (y !== selectedYear || m !== selectedMonth) return false;
       }

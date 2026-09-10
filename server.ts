@@ -2,9 +2,6 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 
-const DEFAULT_SHEETS_WEB_APP_URL =
-  'https://script.google.com/macros/s/AKfycbz8odQurm_YBWJVhMglT8z4NH9d1OO9odFL37laRn9l8mWTn1BpAGiWx_ias0X5606YtQ/exec';
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -19,66 +16,152 @@ async function startServer() {
     res.json({ status: 'ok', time: new Date().toISOString() });
   });
 
-  // Google Sheets Sync Server-Side Proxy Endpoint
-  // Completely eliminates browser CORS, iframe redirect blocks, and connection dropouts
+// Google Sheets Sync Server-Side Proxy Endpoint
+  // Safely proxies requests to Google Apps Script Web App without CORS issues or uncaught exceptions
+  const DEFAULT_APP_SCRIPT_URL =
+    'https://script.google.com/macros/s/AKfycbwyFanvCA1kSeZ8_jKEQSmDmlggpuGdcJEN29kCsM8a4QNiH6Sf3mqLIId2Ipfa_XJK/exec';
+
   app.all('/api/sheets-sync', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+
     try {
       const queryUrl = typeof req.query.url === 'string' ? req.query.url.trim() : '';
       const bodyUrl = req.body && typeof req.body.webAppUrl === 'string' ? req.body.webAppUrl.trim() : '';
-      const targetWebAppUrl = queryUrl || bodyUrl || DEFAULT_SHEETS_WEB_APP_URL;
+      const targetWebAppUrl = queryUrl || bodyUrl || DEFAULT_APP_SCRIPT_URL;
 
-      if (!targetWebAppUrl.startsWith('https://script.google.com/')) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'URL Google Apps Script tidak valid.',
+      if (!targetWebAppUrl || !targetWebAppUrl.startsWith('https://script.google.com/macros/s/')) {
+        return res.json({
+          status: 'unconfigured',
+          message: 'URL Google Apps Script belum diatur atau tidak valid.',
         });
       }
+
+      // Helper function to safely parse response as JSON or detect HTML/Errors
+      const handleGoogleResponse = async (response: Response) => {
+        const status = response.status;
+        const text = await response.text();
+        const trimmed = text.trim();
+
+        // Detect HTML error pages returned by Google Apps Script / Google Accounts
+        const isHtml =
+          trimmed.startsWith('<!DOCTYPE') ||
+          trimmed.startsWith('<html') ||
+          trimmed.startsWith('<HTML') ||
+          trimmed.includes('<title>Error') ||
+          trimmed.includes('Sign in - Google Accounts');
+
+        if (status === 404 || trimmed.includes('404 Not Found') || trimmed.includes('Error 404')) {
+          return {
+            status: 'error',
+            code: 404,
+            message: 'Deployment Web App Google Apps Script tidak ditemukan (HTTP 404). Silakan pastikan Web App sudah dibuat melalui menu "Terapkan (Deploy) > Penerapan Baru" di Google Sheets.',
+          };
+        }
+
+        if (
+          status === 401 ||
+          status === 403 ||
+          trimmed.includes('Sign in - Google Accounts') ||
+          trimmed.includes('ServiceLogin') ||
+          trimmed.includes('accounts.google.com')
+        ) {
+          return {
+            status: 'error',
+            code: 401,
+            message:
+              'Akses Google Apps Script terkunci (dialihkan ke login Google). Silakan buka Google Sheets > Ekstensi > Apps Script > Terapkan (Deploy) > Kelola Penerapan > Edit, lalu ubah "Siapa yang memiliki akses" menjadi "Siapa saja" (Anyone).',
+          };
+        }
+
+        if (isHtml) {
+          return {
+            status: 'error',
+            message: 'Google Apps Script merespon dengan halaman HTML (bukan JSON). Pastikan Web App disetel dengan akses "Siapa saja (Anyone)" dan kode skrip telah disimpan.',
+          };
+        }
+
+        try {
+          const parsed = JSON.parse(trimmed);
+          return parsed;
+        } catch {
+          return {
+            status: 'error',
+            message: 'Format respon dari Google Apps Script tidak valid.',
+            raw: trimmed.slice(0, 150),
+          };
+        }
+      };
 
       if (req.method === 'GET') {
         const action = (req.query.action as string) || 'fetch_all';
         const sep = targetWebAppUrl.includes('?') ? '&' : '?';
         const fullUrl = `${targetWebAppUrl}${sep}action=${encodeURIComponent(action)}&t=${Date.now()}`;
 
-        const response = await fetch(fullUrl, {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json',
-          },
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-        if (!response.ok) {
-          throw new Error(`Google Apps Script merespon dengan status ${response.status}`);
+        try {
+          const response = await fetch(fullUrl, {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+            },
+            redirect: 'follow',
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+          const result = await handleGoogleResponse(response);
+          return res.json(result);
+        } catch (fetchErr: any) {
+          clearTimeout(timeoutId);
+          return res.json({
+            status: 'error',
+            message: `Gagal menghubungi Google Apps Script: ${fetchErr.message || 'Timeout / Jaringan'}`,
+          });
         }
-
-        const data = await response.json();
-        return res.json(data);
       } else {
-        // POST request (push all or push student)
+        // POST request (push all data or push updates)
         let payloadToSend = req.body;
         if (req.body && req.body.payload) {
           payloadToSend = req.body.payload;
         }
 
-        const response = await fetch(targetWebAppUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'text/plain;charset=utf-8',
-          },
-          body: typeof payloadToSend === 'string' ? payloadToSend : JSON.stringify(payloadToSend),
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-        if (!response.ok) {
-          throw new Error(`Google Apps Script merespon HTTP ${response.status} saat menyimpan data`);
+        try {
+          const response = await fetch(targetWebAppUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: typeof payloadToSend === 'string' ? payloadToSend : JSON.stringify(payloadToSend),
+            redirect: 'follow',
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+          const result = await handleGoogleResponse(response);
+          return res.json(result);
+        } catch (fetchErr: any) {
+          clearTimeout(timeoutId);
+          return res.json({
+            status: 'error',
+            message: `Gagal mengirim data ke Google Apps Script: ${fetchErr.message || 'Timeout / Jaringan'}`,
+          });
         }
-
-        const data = await response.json();
-        return res.json(data);
       }
     } catch (err: any) {
-      console.error('Error in /api/sheets-sync:', err);
-      return res.status(500).json({
+      return res.json({
         status: 'error',
-        message: err.message || 'Gagal terhubung ke Google Apps Script',
+        message: err.message || 'Terjadi kendala pada proxy sinkronisasi Google Sheets',
       });
     }
   });
