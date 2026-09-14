@@ -702,19 +702,9 @@ export const SheetsSyncService = {
       const data = localStorage.getItem(SHEETS_CONFIG_KEY);
       let parsed = data ? JSON.parse(data) : {};
 
-      // Auto-populate or migrate to the user's active Google Apps Script Web App URL
-      if (
-        !parsed.webAppUrl ||
-        typeof parsed.webAppUrl !== 'string' ||
-        parsed.webAppUrl.trim() === '' ||
-        parsed.webAppUrl.includes('AKfycbz8odQurm_YBWJVhMglT8z4NH9d1OO9odFL37laRn9l8mWTn1BpAGiWx_ias0X5606YtQ') ||
-        !parsed.webAppUrl.startsWith('https://script.google.com/macros/s/')
-      ) {
-        parsed.webAppUrl = DEFAULT_SHEETS_WEB_APP_URL;
-        parsed.autoSyncEnabled = true;
-      } else {
-        parsed.webAppUrl = parsed.webAppUrl.trim();
-      }
+      // Ensure active Google Apps Script Web App URL is set to the updated link
+      parsed.webAppUrl = DEFAULT_SHEETS_WEB_APP_URL;
+      parsed.autoSyncEnabled = true;
 
       if (!parsed.spreadsheetUrl) {
         parsed.spreadsheetUrl = 'https://docs.google.com/spreadsheets/d/1_Q7LKCY5xJROp3Ux2jueO8dSElyHEtK7BYW3aSYh8VQ/edit';
