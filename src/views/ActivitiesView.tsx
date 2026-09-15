@@ -508,6 +508,7 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
           >
             <option value="ALL">Semua Rombel</option>
             <option value="10-DKV-1">10-DKV-1</option>
+            <option value="10-DKV-2">10-DKV-2</option>
             <option value="10-DKV-3">10-DKV-3</option>
             <option value="11-DKV-3">11-DKV-3</option>
           </select>
@@ -863,6 +864,7 @@ export const ActivitiesView: React.FC<ActivitiesViewProps> = ({
                   >
                     <option value="Semua Rombel">Semua Rombel (10 & 11 DKV)</option>
                     <option value="10-DKV-1">10-DKV-1</option>
+                    <option value="10-DKV-2">10-DKV-2</option>
                     <option value="10-DKV-3">10-DKV-3</option>
                     <option value="11-DKV-3">11-DKV-3</option>
                   </select>

@@ -331,7 +331,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
           {/* Rombel Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-            {['all', '10-DKV-1', '10-DKV-3', '11-DKV-3'].map((rombel) => (
+            {['all', '10-DKV-1', '10-DKV-2', '10-DKV-3', '11-DKV-3'].map((rombel) => (
               <button
                 key={rombel}
                 id={`filter-rombel-${rombel}`}
@@ -976,6 +976,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                         className="w-full p-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-blue-600"
                       >
                         <option value="10-DKV-1">10-DKV-1</option>
+                        <option value="10-DKV-2">10-DKV-2</option>
                         <option value="10-DKV-3">10-DKV-3</option>
                         <option value="11-DKV-3">11-DKV-3</option>
                       </select>

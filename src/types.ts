@@ -1,4 +1,4 @@
-export type RombelType = '10-DKV-1' | '10-DKV-3' | '11-DKV-3';
+export type RombelType = '10-DKV-1' | '10-DKV-2' | '10-DKV-3' | '11-DKV-3';
 
 export type GenderType = 'L' | 'P';
 

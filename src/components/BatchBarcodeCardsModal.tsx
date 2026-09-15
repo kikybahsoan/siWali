@@ -98,6 +98,7 @@ export const BatchBarcodeCardsModal: React.FC<BatchBarcodeCardsModalProps> = ({
             >
               <option value="all">Semua Rombel ({students.length})</option>
               <option value="10-DKV-1">10-DKV-1</option>
+              <option value="10-DKV-2">10-DKV-2</option>
               <option value="10-DKV-3">10-DKV-3</option>
               <option value="11-DKV-3">11-DKV-3</option>
             </select>
