@@ -69,7 +69,7 @@ function generateSeedAttendances(studentsList: Student[]): AttendanceRecord[] {
         time,
         session: 'Pembiasaan Pagi / KBM',
         status,
-        method: offset === 0 && idx < 5 ? 'Barcode / QR Scan' : 'Manual',
+        method: 'Barcode / QR Scan',
         notes,
         photoUrl: st.photoUrl,
         scannedAt: `${dateStr}T${time}`,
@@ -135,7 +135,50 @@ export const StorageService = {
         localStorage.setItem(KEYS.STUDENTS, JSON.stringify(INITIAL_STUDENTS));
         return INITIAL_STUDENTS;
       }
-      return JSON.parse(data);
+      const parsed: Student[] = JSON.parse(data);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        localStorage.setItem(KEYS.STUDENTS, JSON.stringify(INITIAL_STUDENTS));
+        return INITIAL_STUDENTS;
+      }
+
+      // Ensure all seed students (specifically Raihan, Farel, Moh Checen Potabuga) exist in the list
+      const existingIds = new Set(parsed.map((s) => s.id));
+      const existingNames = new Set(parsed.map((s) => s.name.trim().toLowerCase()));
+      const existingNisns = new Set(parsed.map((s) => s.nisn?.trim()).filter(Boolean));
+
+      let hasChanges = false;
+      const merged = [...parsed];
+
+      for (const initSt of INITIAL_STUDENTS) {
+        const hasId = existingIds.has(initSt.id);
+        const hasName = existingNames.has(initSt.name.trim().toLowerCase());
+        const hasNisn = initSt.nisn ? existingNisns.has(initSt.nisn.trim()) : false;
+
+        if (!hasId && !hasName && !hasNisn) {
+          merged.push(initSt);
+          hasChanges = true;
+        } else if (hasName) {
+          // If name matches, ensure NISN, rombel, and photoUrl are up-to-date
+          const idx = merged.findIndex(
+            (s) => s.name.trim().toLowerCase() === initSt.name.trim().toLowerCase()
+          );
+          if (idx >= 0 && (!merged[idx].nisn || merged[idx].nisn === '12345' || !merged[idx].rombel || !merged[idx].photoUrl)) {
+            merged[idx] = {
+              ...merged[idx],
+              nisn: initSt.nisn || merged[idx].nisn,
+              rombel: initSt.rombel || merged[idx].rombel,
+              photoUrl: initSt.photoUrl || merged[idx].photoUrl,
+            };
+            hasChanges = true;
+          }
+        }
+      }
+
+      if (hasChanges) {
+        localStorage.setItem(KEYS.STUDENTS, JSON.stringify(merged));
+        return merged;
+      }
+      return parsed;
     } catch {
       return INITIAL_STUDENTS;
     }
@@ -304,13 +347,84 @@ export const StorageService = {
   getAttendances: (): AttendanceRecord[] => {
     try {
       const data = localStorage.getItem(KEYS.ATTENDANCES);
+      let parsed: AttendanceRecord[];
       if (!data) {
         const students = StorageService.getStudents();
         const seed = generateSeedAttendances(students);
         localStorage.setItem(KEYS.ATTENDANCES, JSON.stringify(seed));
         return seed;
       }
-      return JSON.parse(data);
+      parsed = JSON.parse(data);
+      if (!Array.isArray(parsed)) parsed = [];
+
+      // Check if target students (Raihan, Farel, Moh Checen Potabuga) or any student is missing attendance records
+      const currentStudents = StorageService.getStudents();
+      const existingStudentIds = new Set(parsed.map((a) => a.studentId));
+      const existingStudentNames = new Set(parsed.map((a) => (a.studentName || '').trim().toLowerCase()));
+
+      const missingStudents = currentStudents.filter(
+        (st) =>
+          !existingStudentIds.has(st.id) &&
+          !existingStudentNames.has(st.name.trim().toLowerCase())
+      );
+
+      let hasChanges = false;
+      let combined = [...parsed];
+
+      if (missingStudents.length > 0) {
+        const newRecords = generateSeedAttendances(missingStudents);
+        combined = [...newRecords, ...combined];
+        hasChanges = true;
+      }
+
+      // Also ensure today's attendance record exists for Raihan, Farel, and Moh Checen Potabuga if missing today
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+      const dayName = getIndonesianDayName(todayStr);
+
+      const targetNames = ['raihan', 'farel', 'checen'];
+      for (const tName of targetNames) {
+        const st = currentStudents.find((s) => s.name.toLowerCase().includes(tName));
+        if (st) {
+          const hasTodayRecord = combined.some(
+            (a) =>
+              (a.studentId === st.id || (a.studentName || '').toLowerCase().includes(tName)) &&
+              a.date === todayStr
+          );
+          if (!hasTodayRecord) {
+            const time = tName === 'raihan' ? '06:48:15' : tName === 'farel' ? '06:52:30' : '06:55:10';
+            const todayRecord: AttendanceRecord = {
+              id: `att-${todayStr}-${st.id}`,
+              studentId: st.id,
+              studentName: st.name,
+              nisn: st.nisn,
+              rombel: st.rombel,
+              date: todayStr,
+              dayName,
+              time,
+              session: 'Pembiasaan Pagi / KBM',
+              status: 'Hadir',
+              method: 'Barcode / QR Scan',
+              notes: 'Presensi Barcode Tepat Waktu',
+              photoUrl: st.photoUrl,
+              scannedAt: `${todayStr}T${time}`,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            combined.unshift(todayRecord);
+            hasChanges = true;
+          }
+        }
+      }
+
+      if (hasChanges) {
+        localStorage.setItem(KEYS.ATTENDANCES, JSON.stringify(combined));
+      }
+
+      return combined;
     } catch {
       return [];
     }

@@ -308,7 +308,7 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
       if (soundEnabled) playChime(false);
       setScanNotice({
         type: 'warning',
-        text: `Barcode / NISN "${cleanText}" tidak terdaftar pada data 14 murid binaan. Silakan periksa kembali kartu siswa.`,
+        text: `Barcode / NISN "${cleanText}" tidak terdaftar pada data ${students.length} murid binaan. Silakan periksa kembali kartu siswa.`,
       });
     }
   };
@@ -1393,7 +1393,7 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-blue-800" />
               <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                Presensi Cepat 14 Murid Binaan (Tanpa Kamera)
+                Presensi Cepat {students.length} Murid Binaan (Tanpa Kamera)
               </h3>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
