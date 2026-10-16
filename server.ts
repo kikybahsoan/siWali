@@ -118,6 +118,23 @@ async function startServer() {
 
           clearTimeout(timeoutId);
           const result = await handleGoogleResponse(response);
+          if (result && result.data) {
+            if (Array.isArray(result.data.students)) {
+              result.data.students = result.data.students.filter(
+                (s: any) => s && s.id !== 'std-10' && (!s.name || s.name.trim().toLowerCase() !== 'rahmat abubakar')
+              );
+            }
+            if (Array.isArray(result.data.attendances)) {
+              result.data.attendances = result.data.attendances.filter(
+                (a: any) => a && a.studentId !== 'std-10' && (!a.studentName || a.studentName.trim().toLowerCase() !== 'rahmat abubakar')
+              );
+            }
+            if (Array.isArray(result.data.collaborations)) {
+              result.data.collaborations = result.data.collaborations.filter(
+                (c: any) => c && c.studentId !== 'std-10' && (!c.studentName || c.studentName.trim().toLowerCase() !== 'rahmat abubakar')
+              );
+            }
+          }
           return res.json(result);
         } catch (fetchErr: any) {
           clearTimeout(timeoutId);
@@ -131,6 +148,24 @@ async function startServer() {
         let payloadToSend = req.body;
         if (req.body && req.body.payload) {
           payloadToSend = req.body.payload;
+        }
+
+        if (payloadToSend && typeof payloadToSend === 'object') {
+          if (Array.isArray(payloadToSend.students)) {
+            payloadToSend.students = payloadToSend.students.filter(
+              (s: any) => s && s.id !== 'std-10' && (!s.name || s.name.trim().toLowerCase() !== 'rahmat abubakar')
+            );
+          }
+          if (Array.isArray(payloadToSend.attendances)) {
+            payloadToSend.attendances = payloadToSend.attendances.filter(
+              (a: any) => a && a.studentId !== 'std-10' && (!a.studentName || a.studentName.trim().toLowerCase() !== 'rahmat abubakar')
+            );
+          }
+          if (Array.isArray(payloadToSend.collaborations)) {
+            payloadToSend.collaborations = payloadToSend.collaborations.filter(
+              (c: any) => c && c.studentId !== 'std-10' && (!c.studentName || c.studentName.trim().toLowerCase() !== 'rahmat abubakar')
+            );
+          }
         }
 
         const controller = new AbortController();

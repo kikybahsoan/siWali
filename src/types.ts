@@ -313,7 +313,18 @@ export type AttendanceStatus = 'Hadir' | 'Sakit' | 'Izin' | 'Alpa' | 'Terlambat'
 
 export type AttendanceMethod = 'Barcode / QR Scan' | 'Manual' | 'Auto Generate';
 
-export type AttendanceSession = 'Pembiasaan Pagi / KBM' | 'Sholat Dhuha' | 'Literasi DKV' | 'Senam Pagi' | 'KBM Siang' | 'Kegiatan Khusus';
+export type PrayerSession = 'Sholat Dhuhur' | 'Sholat Ashar' | 'Sholat Dhuha' | 'Sholat Jumat';
+
+export type AttendanceSession =
+  | 'Pembiasaan Pagi / KBM'
+  | 'Sholat Dhuhur'
+  | 'Sholat Ashar'
+  | 'Sholat Dhuha'
+  | 'Sholat Jumat'
+  | 'Literasi DKV'
+  | 'Senam Pagi'
+  | 'KBM Siang'
+  | 'Kegiatan Khusus';
 
 export interface AttendanceRecord {
   id: string;

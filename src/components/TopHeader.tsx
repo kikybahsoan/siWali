@@ -41,10 +41,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         return `Ringkasan Perwalian — ${profile.semester} ${profile.schoolYear}`;
       case 'scanner':
         return 'Scan Barcode & QR Presensi Murid';
+      case 'sholat':
+        return 'Kartu Shalat Digital Murid (Doc Oct 16 2026.pdf)';
       case 'attendance':
         return 'Buku Rekapitulasi Presensi & Kehadiran Murid';
       case 'students':
-        return 'Identitas & Profil 14 Murid Wali';
+        return 'Identitas & Profil Murid Wali';
       case 'activities':
         return 'Kegiatan Pembiasaan Harian, Mingguan & Bulanan';
       case 'consultations':
@@ -66,6 +68,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         return `SMK Negeri 2 Gorontalo • Program Keahlian ${profile.expertiseProgram}`;
       case 'scanner':
         return 'Pemindai Kartu Barcode Siswa Real-time & Sinkronisasi Otomatis Google Sheets';
+      case 'sholat':
+        return 'Monitoring Ibadah Sholat Dhuhur, Ashar, Dhuha & Jumat ber-Cap Rohis Sah';
       case 'attendance':
         return 'Monitoring Harian, Matriks Bulanan Resmi & Cetak Rekapitulasi';
       case 'students':

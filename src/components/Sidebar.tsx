@@ -21,6 +21,7 @@ import {
   LogOut,
   KeyRound,
   Eye,
+  Award,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -68,9 +69,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: QrCode,
     },
     {
+      id: 'sholat' as TabType,
+      code: 'KS',
+      label: 'Kartu Shalat Digital',
+      icon: Award,
+    },
+    {
       id: 'attendance' as TabType,
-      code: 'RK',
       label: 'Rekap Kehadiran',
+      code: 'RK',
       icon: ClipboardCheck,
     },
     {

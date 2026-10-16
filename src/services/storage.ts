@@ -82,6 +82,95 @@ function generateSeedAttendances(studentsList: Student[]): AttendanceRecord[] {
   return records;
 }
 
+function generateSeedPrayerAttendances(studentsList: Student[]): AttendanceRecord[] {
+  const records: AttendanceRecord[] = [];
+  const validStudents = studentsList.filter(
+    (s) => s.id !== 'std-10' && (!s.name || s.name.trim().toLowerCase() !== 'rahmat abubakar')
+  );
+
+  const datesToSeed = [
+    { date: '2026-09-02', dow: 3, dayName: 'Rabu' },
+    { date: '2026-09-14', dow: 1, dayName: 'Senin' },
+    { date: '2026-09-15', dow: 2, dayName: 'Selasa' },
+    { date: '2026-09-16', dow: 3, dayName: 'Rabu' },
+    { date: '2026-09-17', dow: 4, dayName: 'Kamis' },
+    { date: '2026-09-18', dow: 5, dayName: 'Jumat' },
+    { date: '2026-09-21', dow: 1, dayName: 'Senin' },
+    { date: '2026-09-22', dow: 2, dayName: 'Selasa' },
+    { date: '2026-09-25', dow: 5, dayName: 'Jumat' },
+    { date: '2026-09-28', dow: 1, dayName: 'Senin' },
+    { date: '2026-09-29', dow: 2, dayName: 'Selasa' },
+    { date: '2026-09-30', dow: 3, dayName: 'Rabu' },
+    { date: '2026-10-02', dow: 5, dayName: 'Jumat' },
+    { date: '2026-10-05', dow: 1, dayName: 'Senin' },
+    { date: '2026-10-06', dow: 2, dayName: 'Selasa' },
+    { date: '2026-10-07', dow: 3, dayName: 'Rabu' },
+    { date: '2026-10-08', dow: 4, dayName: 'Kamis' },
+    { date: '2026-10-09', dow: 5, dayName: 'Jumat' },
+    { date: '2026-10-12', dow: 1, dayName: 'Senin' },
+    { date: '2026-10-13', dow: 2, dayName: 'Selasa' },
+    { date: '2026-10-14', dow: 3, dayName: 'Rabu' },
+    { date: '2026-10-15', dow: 4, dayName: 'Kamis' },
+  ];
+
+  datesToSeed.forEach(({ date, dow, dayName }) => {
+    const isFri = dow === 5;
+    const session1 = isFri ? 'Sholat Dhuha' : 'Sholat Dhuhur';
+    const session2 = isFri ? 'Sholat Jumat' : 'Sholat Ashar';
+    const time1 = isFri ? '08:15:20' : '12:15:30';
+    const time2 = isFri ? '12:20:10' : '15:25:40';
+
+    validStudents.forEach((st, idx) => {
+      const attends1 = date === '2026-09-25' || (idx + parseInt(date.slice(-2))) % 7 !== 0;
+      const attends2 = date === '2026-09-25' || (idx + parseInt(date.slice(-2))) % 9 !== 0;
+
+      if (attends1) {
+        records.push({
+          id: `att-${date}-${session1.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${st.id}`,
+          studentId: st.id,
+          studentName: st.name,
+          nisn: st.nisn,
+          rombel: st.rombel,
+          date,
+          dayName,
+          time: time1,
+          session: session1,
+          status: 'Hadir',
+          method: 'Barcode / QR Scan',
+          notes: `Presensi ${session1} (Cap Rohis Sah)`,
+          photoUrl: st.photoUrl,
+          scannedAt: `${date}T${time1}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      if (attends2) {
+        records.push({
+          id: `att-${date}-${session2.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${st.id}`,
+          studentId: st.id,
+          studentName: st.name,
+          nisn: st.nisn,
+          rombel: st.rombel,
+          date,
+          dayName,
+          time: time2,
+          session: session2,
+          status: 'Hadir',
+          method: 'Barcode / QR Scan',
+          notes: `Presensi ${session2} (Cap Rohis Sah)`,
+          photoUrl: st.photoUrl,
+          scannedAt: `${date}T${time2}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    });
+  });
+
+  return records;
+}
+
 export const StorageService = {
   // Local Edit Timing to Prevent Sync Race Conditions
   recordLocalEditTime: (): void => {
@@ -141,15 +230,35 @@ export const StorageService = {
         return INITIAL_STUDENTS;
       }
 
-      // Ensure all seed students (specifically Raihan, Farel, Moh Checen Potabuga) exist in the list
-      const existingIds = new Set(parsed.map((s) => s.id));
-      const existingNames = new Set(parsed.map((s) => s.name.trim().toLowerCase()));
-      const existingNisns = new Set(parsed.map((s) => s.nisn?.trim()).filter(Boolean));
+      // Ensure std-10 (Rahmat Abubakar) is recorded as deleted tombstone
+      const deletedMap = StorageService.getDeletedStudentIds();
+      if (!deletedMap['std-10']) {
+        StorageService.recordDeletedStudentId('std-10');
+        deletedMap['std-10'] = new Date().toISOString();
+      }
 
+      // Filter out Rahmat Abubakar / std-10 and any locally deleted students
       let hasChanges = false;
-      const merged = [...parsed];
+      let merged = parsed.filter((s) => {
+        if (!s) return false;
+        if (s.id === 'std-10') return false;
+        if (s.name && s.name.trim().toLowerCase() === 'rahmat abubakar') return false;
+        if (deletedMap[s.id]) return false;
+        return true;
+      });
+
+      if (merged.length !== parsed.length) {
+        hasChanges = true;
+      }
+
+      // Ensure all seed students (specifically Raihan, Farel, Moh Checen Potabuga) exist in the list
+      const existingIds = new Set(merged.map((s) => s.id));
+      const existingNames = new Set(merged.map((s) => s.name.trim().toLowerCase()));
+      const existingNisns = new Set(merged.map((s) => s.nisn?.trim()).filter(Boolean));
 
       for (const initSt of INITIAL_STUDENTS) {
+        if (initSt.id === 'std-10' || initSt.name.trim().toLowerCase() === 'rahmat abubakar') continue;
+        if (deletedMap[initSt.id]) continue;
         const hasId = existingIds.has(initSt.id);
         const hasName = existingNames.has(initSt.name.trim().toLowerCase());
         const hasNisn = initSt.nisn ? existingNisns.has(initSt.nisn.trim()) : false;
@@ -173,6 +282,14 @@ export const StorageService = {
           }
         }
       }
+
+      // Re-index continuous numbering
+      merged.forEach((s, idx) => {
+        if (s.no !== idx + 1) {
+          s.no = idx + 1;
+          hasChanges = true;
+        }
+      });
 
       if (hasChanges) {
         localStorage.setItem(KEYS.STUDENTS, JSON.stringify(merged));
@@ -237,14 +354,14 @@ export const StorageService = {
 
     // 1. Initialize map with existing local students
     for (const st of localList) {
-      if (st && st.id) {
+      if (st && st.id && st.id !== 'std-10' && (!st.name || st.name.trim().toLowerCase() !== 'rahmat abubakar')) {
         mergedMap.set(st.id, st);
       }
     }
 
     // 2. Iterate through remote students
     for (const r of remoteStudents) {
-      if (!r || !r.id) continue;
+      if (!r || !r.id || r.id === 'std-10' || (r.name && r.name.trim().toLowerCase() === 'rahmat abubakar')) continue;
 
       // Check if student was explicitly deleted locally
       const deletedAt = deletedMap[r.id];
@@ -420,6 +537,25 @@ export const StorageService = {
         }
       }
 
+      // Ensure seed prayer attendance records exist if none present
+      const hasPrayerRecords = combined.some(
+        (a) => a.session && a.session.startsWith('Sholat')
+      );
+      if (!hasPrayerRecords && currentStudents.length > 0) {
+        const seedPrayers = generateSeedPrayerAttendances(currentStudents);
+        combined.push(...seedPrayers);
+        hasChanges = true;
+      }
+
+      // Filter out any attendances belonging to std-10 or Rahmat Abubakar
+      const beforeFilterLen = combined.length;
+      combined = combined.filter(
+        (a) => a.studentId !== 'std-10' && (!a.studentName || a.studentName.trim().toLowerCase() !== 'rahmat abubakar')
+      );
+      if (combined.length !== beforeFilterLen) {
+        hasChanges = true;
+      }
+
       if (hasChanges) {
         localStorage.setItem(KEYS.ATTENDANCES, JSON.stringify(combined));
       }
@@ -537,7 +673,15 @@ export const StorageService = {
         localStorage.setItem(KEYS.COLLABORATIONS, JSON.stringify(INITIAL_COLLABORATIONS));
         return INITIAL_COLLABORATIONS;
       }
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (!Array.isArray(parsed)) return INITIAL_COLLABORATIONS;
+      const filtered = parsed.filter(
+        (c) => c.studentId !== 'std-10' && (!c.studentName || c.studentName.trim().toLowerCase() !== 'rahmat abubakar')
+      );
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem(KEYS.COLLABORATIONS, JSON.stringify(filtered));
+      }
+      return filtered;
     } catch {
       return INITIAL_COLLABORATIONS;
     }
@@ -686,13 +830,19 @@ export const StorageService = {
       StorageService.saveActivities(data.activities);
     }
     if (data.attendances && Array.isArray(data.attendances) && data.attendances.length > 0) {
-      StorageService.saveAttendances(data.attendances);
+      const cleanAttendances = data.attendances.filter(
+        (a) => a.studentId !== 'std-10' && (!a.studentName || a.studentName.trim().toLowerCase() !== 'rahmat abubakar')
+      );
+      StorageService.saveAttendances(cleanAttendances);
     }
     if (data.consultations && Array.isArray(data.consultations) && data.consultations.length > 0) {
       StorageService.saveConsultations(data.consultations);
     }
     if (data.collaborations && Array.isArray(data.collaborations) && data.collaborations.length > 0) {
-      StorageService.saveCollaborations(data.collaborations);
+      const cleanCollabs = data.collaborations.filter(
+        (c) => c.studentId !== 'std-10' && (!c.studentName || c.studentName.trim().toLowerCase() !== 'rahmat abubakar')
+      );
+      StorageService.saveCollaborations(cleanCollabs);
     }
     if (data.cases && Array.isArray(data.cases) && data.cases.length > 0) {
       StorageService.saveCases(data.cases);

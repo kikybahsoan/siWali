@@ -22,6 +22,7 @@ import { CasesView } from './views/CasesView';
 import { JournalView } from './views/JournalView';
 import { AttendanceScannerView } from './views/AttendanceScannerView';
 import { AttendanceRecapView } from './views/AttendanceRecapView';
+import { PrayerCardView } from './views/PrayerCardView';
 import { PrintDocumentModal, PrintDocType } from './components/PrintDocumentModal';
 import { SheetsSyncModal } from './components/SheetsSyncModal';
 import { AdminAuthModal } from './components/AdminAuthModal';
@@ -84,7 +85,15 @@ export function App() {
 
   // Deep Navigation & Direct Modal Triggers
   const [selectedCaseIdForView, setSelectedCaseIdForView] = useState<string | null>(null);
+  const [selectedPrayerStudentId, setSelectedPrayerStudentId] = useState<string | null>(null);
   const [isDirectActionModalOpen, setIsDirectActionModalOpen] = useState<boolean>(false);
+
+  const handleNavigateToPrayerCard = useCallback((studentId?: string) => {
+    if (studentId) {
+      setSelectedPrayerStudentId(studentId);
+    }
+    setActiveTab('sholat');
+  }, []);
 
   // Settings / Profile Modal
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -728,8 +737,22 @@ export function App() {
               attendances={attendances}
               onAttendanceUpdated={handleAttendanceUpdated}
               onNavigateToRecap={() => setActiveTab('attendance')}
+              onNavigateToPrayerCard={handleNavigateToPrayerCard}
               isAdmin={isAdmin}
               onRequireAdmin={handleRequireAdmin}
+            />
+          )}
+
+          {activeTab === 'sholat' && (
+            <PrayerCardView
+              students={students}
+              profile={profile}
+              attendances={attendances}
+              onAttendanceUpdated={handleAttendanceUpdated}
+              onNavigateToScanner={() => setActiveTab('scanner')}
+              isAdmin={isAdmin}
+              onRequireAdmin={handleRequireAdmin}
+              initialStudentId={selectedPrayerStudentId}
             />
           )}
 
@@ -754,6 +777,7 @@ export function App() {
               onSaveStudent={handleSaveStudent}
               onDeleteStudent={handleDeleteStudent}
               onPrintStudent={handlePrintStudent}
+              onNavigateToPrayerCard={handleNavigateToPrayerCard}
               isOpenNewDirectly={isDirectActionModalOpen}
               onCloseNewDirectly={() => setIsDirectActionModalOpen(false)}
             />

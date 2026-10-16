@@ -932,8 +932,13 @@ export const AttendanceRecapView: React.FC<AttendanceRecapViewProps> = ({
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                   >
                     <option value="Pembiasaan Pagi / KBM">Pembiasaan Pagi / KBM</option>
-                    <option value="Sholat Dhuha / Dzuhur">Sholat Dhuha / Dzuhur</option>
-                    <option value="Ekstrakurikuler / Kegiatan Sore">Ekstrakurikuler / Sore</option>
+                    <option value="Sholat Dhuhur">🕌 Sholat Dhuhur (Senin–Kamis)</option>
+                    <option value="Sholat Ashar">🕌 Sholat Ashar (Senin–Kamis)</option>
+                    <option value="Sholat Dhuha">✨ Sholat Dhuha (Jumat)</option>
+                    <option value="Sholat Jumat">🕌 Sholat Jumat (Jumat)</option>
+                    <option value="Literasi DKV">Literasi DKV</option>
+                    <option value="Senam Pagi">Senam Pagi</option>
+                    <option value="Kegiatan Khusus">Kegiatan Khusus</option>
                   </select>
                 </div>
               </div>

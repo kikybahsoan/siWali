@@ -9,12 +9,14 @@ import {
   CalendarCheck,
   QrCode,
   ClipboardCheck,
+  Award,
 } from 'lucide-react';
 
 export type TabType =
   | 'dashboard'
   | 'students'
   | 'scanner'
+  | 'sholat'
   | 'attendance'
   | 'activities'
   | 'consultations'
@@ -47,6 +49,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       id: 'scanner' as TabType,
       label: 'Scan Presensi',
       icon: QrCode,
+    },
+    {
+      id: 'sholat' as TabType,
+      label: 'Kartu Shalat',
+      icon: Award,
     },
     {
       id: 'attendance' as TabType,

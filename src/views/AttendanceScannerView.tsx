@@ -7,6 +7,7 @@ import { getIndonesianDayName, getTodayDateString, formatIndonesianDate } from '
 import { DriveImage } from '../components/DriveImage';
 import { BatchBarcodeCardsModal } from '../components/BatchBarcodeCardsModal';
 import { StudentBarcodeCard } from '../components/StudentBarcodeCard';
+import { PrayerStamp } from '../components/PrayerStamp';
 import {
   Camera,
   CameraOff,
@@ -40,6 +41,7 @@ import {
   Scan,
   Maximize2,
   Contrast,
+  Award,
 } from 'lucide-react';
 
 interface AttendanceScannerViewProps {
@@ -48,6 +50,7 @@ interface AttendanceScannerViewProps {
   attendances: AttendanceRecord[];
   onAttendanceUpdated: (records: AttendanceRecord[]) => void;
   onNavigateToRecap: () => void;
+  onNavigateToPrayerCard?: (studentId?: string) => void;
   isAdmin: boolean;
   onRequireAdmin: () => void;
 }
@@ -109,9 +112,28 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
   attendances,
   onAttendanceUpdated,
   onNavigateToRecap,
+  onNavigateToPrayerCard,
   isAdmin,
   onRequireAdmin,
 }) => {
+  // Day of week & scheduled prayers
+  const todayDayOfWeek = useMemo(() => new Date().getDay(), []);
+  const isFriday = todayDayOfWeek === 5;
+  const isMonToThu = todayDayOfWeek >= 1 && todayDayOfWeek <= 4;
+
+  const scheduledPrayers = useMemo(() => {
+    if (isFriday) {
+      return [
+        { session: 'Sholat Dhuha' as AttendanceSession, label: 'Sholat Dhuha', icon: '✨', timeHint: 'Pagi' },
+        { session: 'Sholat Jumat' as AttendanceSession, label: 'Sholat Jumat', icon: '🕌', timeHint: 'Siang' },
+      ];
+    }
+    return [
+      { session: 'Sholat Dhuhur' as AttendanceSession, label: 'Sholat Dhuhur', icon: '🕌', timeHint: 'Siang' },
+      { session: 'Sholat Ashar' as AttendanceSession, label: 'Sholat Ashar', icon: '🕌', timeHint: 'Sore' },
+    ];
+  }, [isFriday]);
+
   // Scanner state
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [isStartingCamera, setIsStartingCamera] = useState<boolean>(false);
@@ -134,7 +156,18 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
 
   // Form controls for scan session
   const [selectedStatus, setSelectedStatus] = useState<AttendanceStatus>('Hadir');
-  const [selectedSession, setSelectedSession] = useState<AttendanceSession>('Pembiasaan Pagi / KBM');
+  const [selectedSession, setSelectedSession] = useState<AttendanceSession>(() => {
+    const hr = new Date().getHours();
+    const dow = new Date().getDay();
+    if (dow === 5) {
+      return hr >= 11 ? 'Sholat Jumat' : 'Sholat Dhuha';
+    } else if (dow >= 1 && dow <= 4) {
+      if (hr < 10) return 'Pembiasaan Pagi / KBM';
+      if (hr >= 14) return 'Sholat Ashar';
+      return 'Sholat Dhuhur';
+    }
+    return 'Pembiasaan Pagi / KBM';
+  });
   const [manualInput, setManualInput] = useState<string>('');
   const [studentSearch, setStudentSearch] = useState<string>('');
 
@@ -164,22 +197,27 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
     return attendances.filter((a) => a.date === todayStr);
   }, [attendances, todayStr]);
 
+  // Attendances for currently selected session
+  const sessionAttendances = useMemo(() => {
+    return todayAttendances.filter((a) => a.session === selectedSession);
+  }, [todayAttendances, selectedSession]);
+
   // Today's summary counts
   const todayStats = useMemo(() => {
-    const present = todayAttendances.filter((a) => a.status === 'Hadir').length;
-    const late = todayAttendances.filter((a) => a.status === 'Terlambat').length;
-    const sick = todayAttendances.filter((a) => a.status === 'Sakit').length;
-    const permission = todayAttendances.filter((a) => a.status === 'Izin').length;
-    const total = todayAttendances.length;
+    const present = sessionAttendances.filter((a) => a.status === 'Hadir').length;
+    const late = sessionAttendances.filter((a) => a.status === 'Terlambat').length;
+    const sick = sessionAttendances.filter((a) => a.status === 'Sakit').length;
+    const permission = sessionAttendances.filter((a) => a.status === 'Izin').length;
+    const total = sessionAttendances.length;
     const percentage = students.length > 0 ? Math.round(((present + late) / students.length) * 100) : 0;
     return { present, late, sick, permission, total, percentage };
-  }, [todayAttendances, students.length]);
+  }, [sessionAttendances, students.length]);
 
-  // List of students not yet scanned today
+  // List of students not yet scanned for currently selected session today
   const pendingStudents = useMemo(() => {
-    const scannedIds = new Set(todayAttendances.map((a) => a.studentId));
+    const scannedIds = new Set(sessionAttendances.map((a) => a.studentId));
     return students.filter((s) => !scannedIds.has(s.id));
-  }, [students, todayAttendances]);
+  }, [students, sessionAttendances]);
 
   // Filtered students for quick manual attendance click
   const filteredQuickStudents = useMemo(() => {
@@ -199,15 +237,17 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
     const dayName = getIndonesianDayName(todayStr);
 
-    // Default status logic: if after 07:15 and user selected Hadir, auto detect if late or keep selected
+    const isPrayer = selectedSession.startsWith('Sholat');
+    const sessionSlug = selectedSession.toLowerCase().replace(/[^a-z0-9]/g, '-');
+
+    // Default status logic: if after 07:15 and user selected Hadir for morning KBM
     let effectiveStatus = selectedStatus;
-    if (selectedStatus === 'Hadir' && now.getHours() >= 7 && now.getMinutes() > 15) {
-      // Auto-tag late if morning session past 07:15
+    if (selectedSession === 'Pembiasaan Pagi / KBM' && selectedStatus === 'Hadir' && now.getHours() >= 7 && now.getMinutes() > 15) {
       effectiveStatus = 'Terlambat';
     }
 
     const newRecord: AttendanceRecord = {
-      id: `att-${todayStr}-${matchedStudent.id}`,
+      id: `att-${todayStr}-${sessionSlug}-${matchedStudent.id}`,
       studentId: matchedStudent.id,
       studentName: matchedStudent.name,
       nisn: matchedStudent.nisn,
@@ -218,7 +258,9 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
       session: selectedSession,
       status: effectiveStatus,
       method: 'Barcode / QR Scan',
-      notes: effectiveStatus === 'Terlambat' ? 'Terlambat hadir setelah 07:15' : 'Presensi Barcode Tepat Waktu',
+      notes: isPrayer
+        ? `Presensi ${selectedSession} (Cap Rohis Sah)`
+        : (effectiveStatus === 'Terlambat' ? 'Terlambat hadir setelah 07:15' : 'Presensi Barcode Tepat Waktu'),
       photoUrl: matchedStudent.photoUrl,
       scannedAt: now.toISOString(),
       createdAt: now.toISOString(),
@@ -234,11 +276,19 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
     setLastScannedStudent(matchedStudent);
 
     if (soundEnabled) playChime(true);
-    if (voiceAnnounce) speakStudentName(matchedStudent.name, effectiveStatus);
+    if (voiceAnnounce) {
+      if (isPrayer) {
+        speakStudentName(matchedStudent.name, `${selectedSession} tercatat sah`);
+      } else {
+        speakStudentName(matchedStudent.name, effectiveStatus);
+      }
+    }
 
     setScanNotice({
       type: 'success',
-      text: `${matchedStudent.name} (${matchedStudent.nisn}) berhasil dicatat sebagai [${effectiveStatus}] pada pukul ${timeStr}!`,
+      text: isPrayer
+        ? `${matchedStudent.name} (${matchedStudent.nisn}) berhasil dicatat untuk ${selectedSession}! Cap resmi telah dibubuhkan pada Kartu Shalat Digital.`
+        : `${matchedStudent.name} (${matchedStudent.nisn}) berhasil dicatat sebagai [${effectiveStatus}] pada pukul ${timeStr}!`,
     });
 
     // Auto sync to Google Spreadsheet
@@ -867,6 +917,74 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
         {/* Left Col (7 cols): Camera Viewport & Scan Controls */}
         <div className="lg:col-span-7 space-y-4">
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
+            {/* Quick Sesi Sholat & KBM Switcher Bar */}
+            <div className="mb-4 bg-gradient-to-r from-amber-50 to-orange-50/60 p-3 rounded-xl border border-amber-200/80">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 mb-2 border-b border-amber-200/60 gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-black text-amber-950">
+                  <span className="text-base">{isFriday ? '🕌' : '✨'}</span>
+                  <span>Jadwal Sholat Hari {isFriday ? 'Jumat' : 'Senin–Kamis'}:</span>
+                  <span className="font-semibold text-amber-800 text-[11px]">
+                    {isFriday ? 'Sholat Dhuha (Pagi) & Sholat Jumat (Siang)' : 'Sholat Dhuhur (Siang) & Sholat Ashar (Sore)'}
+                  </span>
+                </div>
+                {onNavigateToPrayerCard && (
+                  <button
+                    onClick={() => onNavigateToPrayerCard()}
+                    className="text-[11px] font-bold text-amber-900 hover:text-amber-950 flex items-center gap-1 self-start sm:self-auto px-2 py-0.5 rounded bg-white/80 border border-amber-300 shadow-2xs hover:bg-white"
+                  >
+                    <Award className="w-3.5 h-3.5 text-red-600" />
+                    <span>Buka Kartu Shalat Digital</span>
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* 1-Click Fast Session Selection Buttons */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSession('Pembiasaan Pagi / KBM')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-2xs ${
+                    selectedSession === 'Pembiasaan Pagi / KBM'
+                      ? 'bg-blue-900 text-white shadow-xs'
+                      : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  <span>☀️</span>
+                  <span>KBM Pagi</span>
+                </button>
+
+                {scheduledPrayers.map((sp) => {
+                  const countForPrayer = todayAttendances.filter((a) => a.session === sp.session).length;
+                  const isSelected = selectedSession === sp.session;
+                  return (
+                    <button
+                      key={sp.session}
+                      type="button"
+                      onClick={() => setSelectedSession(sp.session)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-2xs ${
+                        isSelected
+                          ? 'bg-red-600 text-white shadow-xs'
+                          : 'bg-white text-amber-950 hover:bg-amber-100/70 border border-amber-300'
+                      }`}
+                    >
+                      <span>{sp.icon}</span>
+                      <span>{sp.label}</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                          isSelected
+                            ? 'bg-white/20 text-white'
+                            : 'bg-amber-100 text-amber-900 font-bold'
+                        }`}
+                      >
+                        {countForPrayer}/{students.length}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Control Bar: Status, Session & Camera toggle */}
             <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
               <div className="flex items-center gap-2">
@@ -885,15 +1003,20 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
-                <label className="text-xs font-bold text-slate-700">Sesi:</label>
+                <label className="text-xs font-bold text-slate-700">Sesi Aktif:</label>
                 <select
                   value={selectedSession}
                   onChange={(e) => setSelectedSession(e.target.value as AttendanceSession)}
                   className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 border border-slate-300 text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                 >
                   <option value="Pembiasaan Pagi / KBM">Pembiasaan Pagi / KBM</option>
-                  <option value="Sholat Dhuha / Dzuhur">Sholat Dhuha / Dzuhur</option>
-                  <option value="Ekstrakurikuler / Kegiatan Sore">Ekstrakurikuler / Sore</option>
+                  <option value="Sholat Dhuhur">🕌 Sholat Dhuhur (Senin–Kamis)</option>
+                  <option value="Sholat Ashar">🕌 Sholat Ashar (Senin–Kamis)</option>
+                  <option value="Sholat Dhuha">✨ Sholat Dhuha (Jumat)</option>
+                  <option value="Sholat Jumat">🕌 Sholat Jumat (Jumat)</option>
+                  <option value="Literasi DKV">Literasi DKV</option>
+                  <option value="Senam Pagi">Senam Pagi</option>
+                  <option value="Kegiatan Khusus">Kegiatan Khusus</option>
                 </select>
               </div>
 
@@ -1302,19 +1425,59 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
                         <Clock className="w-3 h-3 text-slate-400" />
                         {lastScannedRecord.time}
                       </span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-200">
+                        {lastScannedRecord.session}
+                      </span>
                     </div>
                   </div>
                 </div>
 
+                {/* Prayer Stamp Preview if this attendance is for prayer */}
+                {lastScannedRecord.session.startsWith('Sholat') && (
+                  <div className="mt-3 p-2.5 rounded-xl bg-amber-50/80 border border-amber-300 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <PrayerStamp size="xs" rotation={-2} />
+                      <div>
+                        <span className="text-[11px] font-black text-amber-950 block">
+                          Cap Rohis Sah Ditorehkan
+                        </span>
+                        <span className="text-[10px] text-slate-600 block">
+                          Masuk ke Kartu Shalat Digital {lastScannedStudent.name}
+                        </span>
+                      </div>
+                    </div>
+                    {onNavigateToPrayerCard && (
+                      <button
+                        onClick={() => onNavigateToPrayerCard(lastScannedStudent.id)}
+                        className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs shrink-0"
+                      >
+                        <Award className="w-3 h-3" />
+                        <span>Buka Kartu</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <div className="mt-3 pt-3 border-t border-emerald-100/80 flex items-center justify-between text-[11px]">
                   <span className="text-slate-500">Metode: {lastScannedRecord.method}</span>
-                  <button
-                    onClick={() => setSelectedStudentForCard(lastScannedStudent)}
-                    className="text-blue-700 hover:text-blue-900 font-semibold flex items-center gap-1"
-                  >
-                    <span>Lihat Kartu Barcode</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {onNavigateToPrayerCard && (
+                      <button
+                        onClick={() => onNavigateToPrayerCard(lastScannedStudent.id)}
+                        className="text-amber-800 hover:text-amber-950 font-bold flex items-center gap-1"
+                      >
+                        <Award className="w-3 h-3 text-red-600" />
+                        <span>Kartu Shalat</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setSelectedStudentForCard(lastScannedStudent)}
+                      className="text-blue-700 hover:text-blue-900 font-semibold flex items-center gap-1"
+                    >
+                      <span>Kartu Barcode</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (

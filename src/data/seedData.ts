@@ -917,88 +917,8 @@ export const INITIAL_STUDENTS: Student[] = [
     "prestasiSMP": "Juara 2 lomba lari balok"
   },
   {
-    "id": "std-10",
-    "no": 10,
-    "name": "Rahmat Abubakar",
-    "nickname": "Rahmat",
-    "rombel": "10-DKV-3",
-    "gender": "L",
-    "nisn": "0117459238",
-    "birthPlace": "Gorontalo",
-    "birthDate": "25-03-2011",
-    "religion": "Islam",
-    "address": "Jl. Gelatik",
-    "addressDetail": {
-      "rtRw": "001/003",
-      "kelurahan": "Heledulaa Selatan",
-      "kecamatan": "Kota Timur",
-      "kabKota": "Kota Gorontalo"
-    },
-    "phone": "085341718720",
-    "socialMedia": "@rahmat_abubakar",
-    "birthOrder": 2,
-    "totalSiblings": 4,
-    "chronicIllnessHistory": [],
-    "fatherName": "Ariyanto Abubakar",
-    "fatherJob": "Buruh Harian Lepas",
-    "fatherEthnicity": "Gorontalo",
-    "fatherRelation": "Kandung",
-    "fatherIncome": "Rp 1.600.000",
-    "motherName": "Isna Konta",
-    "motherJob": "Ibu Rumah Tangga",
-    "motherEthnicity": "Gorontalo",
-    "motherRelation": "Kandung",
-    "motherIncome": "-",
-    "parentPhone": "085341718720",
-    "siblingPhone": "",
-    "neighborPhone": "",
-    "educationHistory": [
-      {
-        "level": "SD",
-        "schoolName": "SD Negeri 17 Kota Timur",
-        "entryYear": "2017",
-        "gradYear": "2023",
-        "duration": "6 Tahun"
-      },
-      {
-        "level": "SMP",
-        "schoolName": "SMP Negeri 9 Gorontalo",
-        "entryYear": "2023",
-        "gradYear": "2026",
-        "duration": "3 Tahun"
-      }
-    ],
-    "achievements": [],
-    "extracurriculars": [
-      {
-        "id": "ex-14",
-        "name": "Futsal"
-      },
-      {
-        "id": "ex-15",
-        "name": "Desain Spanduk"
-      }
-    ],
-    "careerGoals": [
-      "Operator Komputer Desain",
-      "Teknisi Cetak"
-    ],
-    "furtherStudyAspiration": "Langsung Bekerja di Industri Percetakan",
-    "masteredSubjects": [
-      "Aplikasi Pengolah Vektor",
-      "Pendidikan Jasmani"
-    ],
-    "strugglingSubjects": [
-      "Matematika",
-      "Fisika"
-    ],
-    "notes": "Membutuhkan pendampingan peralatan praktikum mandiri.",
-    "createdAt": "2026-07-15T08:00:00Z",
-    "updatedAt": "2026-08-23T09:00:00Z"
-  },
-  {
     "id": "std-11",
-    "no": 11,
+    "no": 10,
     "name": "Budiono Sutejo",
     "nickname": "Budi",
     "rombel": "11-DKV-3",
@@ -1096,7 +1016,7 @@ export const INITIAL_STUDENTS: Student[] = [
   },
   {
     "id": "std-12",
-    "no": 12,
+    "no": 11,
     "name": "Christover Yoxy Yakobus",
     "nickname": "Christo",
     "rombel": "11-DKV-3",
@@ -1193,7 +1113,7 @@ export const INITIAL_STUDENTS: Student[] = [
   },
   {
     "id": "std-13",
-    "no": 13,
+    "no": 12,
     "name": "Khaidir Yasin Nento",
     "nickname": "Alim",
     "rombel": "11-DKV-3",
@@ -1282,7 +1202,7 @@ export const INITIAL_STUDENTS: Student[] = [
   },
   {
     "id": "std-14",
-    "no": 14,
+    "no": 13,
     "name": "Misnawati Abdul",
     "nickname": "mimi",
     "rombel": "11-DKV-3",
@@ -1397,7 +1317,7 @@ export const INITIAL_STUDENTS: Student[] = [
   },
   {
     "id": "std-1789428969539",
-    "no": 15,
+    "no": 14,
     "name": "Fardhan Aditya Lantoni",
     "nickname": "Fardhan",
     "nisn": "1234",
@@ -1488,7 +1408,7 @@ export const INITIAL_STUDENTS: Student[] = [
   },
   {
     "id": "std-1789429083924",
-    "no": 16,
+    "no": 15,
     "name": "Moh Checen Potabuga",
     "nickname": "Checen",
     "nisn": "0102319423",
@@ -1571,7 +1491,7 @@ export const INITIAL_STUDENTS: Student[] = [
   },
   {
     "id": "std-1789432326584-13",
-    "no": 17,
+    "no": 16,
     "name": "Farel Kamumu",
     "nickname": "fel",
     "nisn": "0119827364",
@@ -1655,7 +1575,7 @@ export const INITIAL_STUDENTS: Student[] = [
   },
   {
     "id": "std-1789432326586-14",
-    "no": 18,
+    "no": 17,
     "name": "Raihan Raihan Rizki Wahid Dunda",
     "nickname": "Rehan",
     "nisn": "3113880723",

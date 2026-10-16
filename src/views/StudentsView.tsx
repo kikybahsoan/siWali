@@ -43,6 +43,7 @@ interface StudentsViewProps {
   onSaveStudent: (student: Student) => void;
   onDeleteStudent: (id: string) => void;
   onPrintStudent: (student: Student) => void;
+  onNavigateToPrayerCard?: (studentId: string) => void;
   isOpenNewDirectly?: boolean;
   onCloseNewDirectly?: () => void;
 }
@@ -55,6 +56,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   onSaveStudent,
   onDeleteStudent,
   onPrintStudent,
+  onNavigateToPrayerCard,
   isOpenNewDirectly = false,
   onCloseNewDirectly,
 }) => {
@@ -458,6 +460,18 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                 <span>Barcode</span>
               </button>
 
+              {onNavigateToPrayerCard && (
+                <button
+                  id={`btn-sholat-${st.id}`}
+                  onClick={() => onNavigateToPrayerCard(st.id)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-colors"
+                  title="Lihat Kartu Shalat Digital Siswa (Format Doc Oct 16 2026.pdf)"
+                >
+                  <Award className="w-3.5 h-3.5 text-red-600" />
+                  <span>Shalat</span>
+                </button>
+              )}
+
               {isAdmin && (
                 <button
                   id={`btn-delete-${st.id}`}
@@ -592,6 +606,36 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Kartu Shalat Digital Siswa */}
+              {onNavigateToPrayerCard && (
+                <div className="bg-amber-50/80 p-4 rounded-xl border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center text-red-600 shrink-0">
+                      <Award className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-sm text-amber-950">
+                        Kartu Shalat Digital Resmi (Doc Oct 16 2026.pdf)
+                      </h4>
+                      <p className="text-xs text-slate-600">
+                        Lihat blangko kontrol shalat ber-stempel Cap Rohis resmi sekolah.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const stId = selectedStudentForDetail.id;
+                      setSelectedStudentForDetail(null);
+                      onNavigateToPrayerCard(stId);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-amber-900 hover:bg-amber-950 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs shrink-0 self-start sm:self-auto"
+                  >
+                    <Award className="w-3.5 h-3.5 text-red-400" />
+                    <span>Buka Kartu Shalat</span>
+                  </button>
+                </div>
+              )}
 
               {/* Seksi A: Identitas Dasar */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
