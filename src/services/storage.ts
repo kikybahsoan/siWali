@@ -82,94 +82,7 @@ function generateSeedAttendances(studentsList: Student[]): AttendanceRecord[] {
   return records;
 }
 
-function generateSeedPrayerAttendances(studentsList: Student[]): AttendanceRecord[] {
-  const records: AttendanceRecord[] = [];
-  const validStudents = studentsList.filter(
-    (s) => s.id !== 'std-10' && (!s.name || s.name.trim().toLowerCase() !== 'rahmat abubakar')
-  );
-
-  const datesToSeed = [
-    { date: '2026-09-02', dow: 3, dayName: 'Rabu' },
-    { date: '2026-09-14', dow: 1, dayName: 'Senin' },
-    { date: '2026-09-15', dow: 2, dayName: 'Selasa' },
-    { date: '2026-09-16', dow: 3, dayName: 'Rabu' },
-    { date: '2026-09-17', dow: 4, dayName: 'Kamis' },
-    { date: '2026-09-18', dow: 5, dayName: 'Jumat' },
-    { date: '2026-09-21', dow: 1, dayName: 'Senin' },
-    { date: '2026-09-22', dow: 2, dayName: 'Selasa' },
-    { date: '2026-09-25', dow: 5, dayName: 'Jumat' },
-    { date: '2026-09-28', dow: 1, dayName: 'Senin' },
-    { date: '2026-09-29', dow: 2, dayName: 'Selasa' },
-    { date: '2026-09-30', dow: 3, dayName: 'Rabu' },
-    { date: '2026-10-02', dow: 5, dayName: 'Jumat' },
-    { date: '2026-10-05', dow: 1, dayName: 'Senin' },
-    { date: '2026-10-06', dow: 2, dayName: 'Selasa' },
-    { date: '2026-10-07', dow: 3, dayName: 'Rabu' },
-    { date: '2026-10-08', dow: 4, dayName: 'Kamis' },
-    { date: '2026-10-09', dow: 5, dayName: 'Jumat' },
-    { date: '2026-10-12', dow: 1, dayName: 'Senin' },
-    { date: '2026-10-13', dow: 2, dayName: 'Selasa' },
-    { date: '2026-10-14', dow: 3, dayName: 'Rabu' },
-    { date: '2026-10-15', dow: 4, dayName: 'Kamis' },
-  ];
-
-  datesToSeed.forEach(({ date, dow, dayName }) => {
-    const isFri = dow === 5;
-    const session1 = isFri ? 'Sholat Dhuha' : 'Sholat Dhuhur';
-    const session2 = isFri ? 'Sholat Jumat' : 'Sholat Ashar';
-    const time1 = isFri ? '08:15:20' : '12:15:30';
-    const time2 = isFri ? '12:20:10' : '15:25:40';
-
-    validStudents.forEach((st, idx) => {
-      const attends1 = date === '2026-09-25' || (idx + parseInt(date.slice(-2))) % 7 !== 0;
-      const attends2 = date === '2026-09-25' || (idx + parseInt(date.slice(-2))) % 9 !== 0;
-
-      if (attends1) {
-        records.push({
-          id: `att-${date}-${session1.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${st.id}`,
-          studentId: st.id,
-          studentName: st.name,
-          nisn: st.nisn,
-          rombel: st.rombel,
-          date,
-          dayName,
-          time: time1,
-          session: session1,
-          status: 'Hadir',
-          method: 'Barcode / QR Scan',
-          notes: `Presensi ${session1} (Cap Rohis Sah)`,
-          photoUrl: st.photoUrl,
-          scannedAt: `${date}T${time1}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
-      if (attends2) {
-        records.push({
-          id: `att-${date}-${session2.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${st.id}`,
-          studentId: st.id,
-          studentName: st.name,
-          nisn: st.nisn,
-          rombel: st.rombel,
-          date,
-          dayName,
-          time: time2,
-          session: session2,
-          status: 'Hadir',
-          method: 'Barcode / QR Scan',
-          notes: `Presensi ${session2} (Cap Rohis Sah)`,
-          photoUrl: st.photoUrl,
-          scannedAt: `${date}T${time2}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      }
-    });
-  });
-
-  return records;
-}
+// Note: Dummy prayer seed generation has been removed (data dummy cap sholat dihapus).
 
 export const StorageService = {
   // Local Edit Timing to Prevent Sync Race Conditions
@@ -537,13 +450,30 @@ export const StorageService = {
         }
       }
 
-      // Ensure seed prayer attendance records exist if none present
-      const hasPrayerRecords = combined.some(
-        (a) => a.session && a.session.startsWith('Sholat')
-      );
-      if (!hasPrayerRecords && currentStudents.length > 0) {
-        const seedPrayers = generateSeedPrayerAttendances(currentStudents);
-        combined.push(...seedPrayers);
+      // HAPUS DATA DUMMY CAP SHOLAT:
+      // Bersihkan seluruh data dummy sholat yang sempat dibuat oleh seeder otomatis
+      const dummyPrayerDates = new Set([
+        '2026-09-02', '2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17',
+        '2026-09-18', '2026-09-21', '2026-09-22', '2026-09-25', '2026-09-28',
+        '2026-09-29', '2026-09-30', '2026-10-02', '2026-10-05', '2026-10-06',
+        '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-12', '2026-10-13',
+        '2026-10-14', '2026-10-15',
+      ]);
+      const beforeDummyCleanLen = combined.length;
+      combined = combined.filter((a) => {
+        if (!a.session || !a.session.startsWith('Sholat')) return true;
+        const isDummySeedDate = dummyPrayerDates.has(a.date);
+        const isDummySeedTime =
+          a.time === '08:15:20' ||
+          a.time === '12:15:30' ||
+          a.time === '12:20:10' ||
+          a.time === '15:25:40';
+        if (isDummySeedDate && (isDummySeedTime || a.notes?.includes('(Cap Rohis Sah)'))) {
+          return false;
+        }
+        return true;
+      });
+      if (combined.length !== beforeDummyCleanLen) {
         hasChanges = true;
       }
 
@@ -611,6 +541,13 @@ export const StorageService = {
   deleteAttendance: (id: string): AttendanceRecord[] => {
     const list = StorageService.getAttendances();
     const updated = list.filter((a) => a.id !== id);
+    StorageService.saveAttendances(updated);
+    return updated;
+  },
+
+  clearAllPrayerAttendances: (): AttendanceRecord[] => {
+    const list = StorageService.getAttendances();
+    const updated = list.filter((a) => !a.session || !a.session.startsWith('Sholat'));
     StorageService.saveAttendances(updated);
     return updated;
   },

@@ -90,15 +90,18 @@ function playChime(isSuccess: boolean = true) {
   }
 }
 
-// Speech synthesis Indonesian announcement
-function speakStudentName(name: string, status: string) {
+// Speech synthesis Indonesian announcement:
+// Strictly required: TIDAK ADA SUARA TERLAMBAT, HANYA NAMA "SISWA" DAN SUDAH MENGIKUTI NAMA "KEGIATAN"
+function speakStudentAttendance(studentName: string, activityName: string) {
   try {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(`${name}, ${status}`);
+      // Format: [Nama Siswa], sudah mengikuti [Nama Kegiatan]
+      const cleanActivity = activityName.replace(/\s*\/\s*/g, ' ');
+      const utterance = new SpeechSynthesisUtterance(`${studentName}, sudah mengikuti ${cleanActivity}`);
       utterance.lang = 'id-ID';
-      utterance.rate = 1.05;
-      utterance.pitch = 1.1;
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
       window.speechSynthesis.speak(utterance);
     }
   } catch (e) {
@@ -277,11 +280,8 @@ export const AttendanceScannerView: React.FC<AttendanceScannerViewProps> = ({
 
     if (soundEnabled) playChime(true);
     if (voiceAnnounce) {
-      if (isPrayer) {
-        speakStudentName(matchedStudent.name, `${selectedSession} tercatat sah`);
-      } else {
-        speakStudentName(matchedStudent.name, effectiveStatus);
-      }
+      // Pastikan saat scan tidak ada suara terlambat, hanya nama siswa dan sudah mengikuti nama kegiatan
+      speakStudentAttendance(matchedStudent.name, selectedSession);
     }
 
     setScanNotice({

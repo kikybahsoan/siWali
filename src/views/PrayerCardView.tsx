@@ -21,6 +21,7 @@ import {
   Check,
   X,
   Plus,
+  Trash2,
 } from 'lucide-react';
 
 interface PrayerCardViewProps {
@@ -55,6 +56,7 @@ export const PrayerCardView: React.FC<PrayerCardViewProps> = ({
   const [studentSearch, setStudentSearch] = useState<string>('');
   const [semester, setSemester] = useState<'ganjil' | 'genap'>('ganjil');
   const [isBatchPrintMode, setIsBatchPrintMode] = useState<boolean>(false);
+  const [isConfirmClearOpen, setIsConfirmClearOpen] = useState<boolean>(false);
 
   // Manual stamp/edit modal state
   const [selectedCell, setSelectedCell] = useState<{
@@ -165,6 +167,12 @@ export const PrayerCardView: React.FC<PrayerCardViewProps> = ({
     window.print();
   };
 
+  const handleClearAllPrayerStamps = () => {
+    const updated = StorageService.clearAllPrayerAttendances();
+    onAttendanceUpdated(updated);
+    setIsConfirmClearOpen(false);
+  };
+
   if (!currentStudent) {
     return (
       <div className="p-8 text-center text-slate-500">
@@ -226,6 +234,20 @@ export const PrayerCardView: React.FC<PrayerCardViewProps> = ({
             >
               <Users className="w-4 h-4" />
               {isBatchPrintMode ? 'Mode Tunggal' : 'Cetak Semua (17 Murid)'}
+            </button>
+            <button
+              onClick={() => {
+                if (!isAdmin) {
+                  onRequireAdmin();
+                  return;
+                }
+                setIsConfirmClearOpen(true);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-red-900/70 hover:bg-red-800 text-red-100 border border-red-700/60 font-bold text-xs flex items-center gap-1.5 shadow-sm transition active:scale-95"
+              title="Hapus data cap sholat murid"
+            >
+              <Trash2 className="w-4 h-4 text-red-300" />
+              Hapus Data Cap Sholat
             </button>
           </div>
         </div>
@@ -463,6 +485,47 @@ export const PrayerCardView: React.FC<PrayerCardViewProps> = ({
                     Bubuhkan Cap Sholat (Sah)
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear All Prayer Stamps Confirmation Modal */}
+      {isConfirmClearOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-red-600 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">
+                  Hapus Seluruh Data Cap Sholat?
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Tindakan ini akan mengosongkan seluruh stempel sholat
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 mb-6 leading-relaxed bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-900">
+              Semua catatan presensi sholat (Dhuhur, Ashar, Dhuha, Jumat) pada kartu digital seluruh murid binaan akan dihapus/dikosongkan. Anda dapat mulai mencatat kehadiran sholat yang baru melalui scan barcode.
+            </p>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setIsConfirmClearOpen(false)}
+                className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold text-xs"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleClearAllPrayerStamps}
+                className="px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Trash2 className="w-4 h-4" />
+                Ya, Hapus Data Cap Sholat
               </button>
             </div>
           </div>
